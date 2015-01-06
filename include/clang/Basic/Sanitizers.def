@@ -41,6 +41,9 @@
 // AddressSanitizer
 SANITIZER("address", Address)
 
+// CrunchSanitizer
+SANITIZER("crunch", Crunch)
+
 // MemorySanitizer
 SANITIZER("memory", Memory)
 

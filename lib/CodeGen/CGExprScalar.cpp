@@ -470,6 +470,9 @@ public:
       return Builder.CreateFMul(Ops.LHS, Ops.RHS, "mul");
     return Builder.CreateMul(Ops.LHS, Ops.RHS, "mul");
   }
+
+  void EmitCastCheck(Value *src, llvm::Type *DestTy);
+
   /// Create a binary op that checks for overflow.
   /// Currently only supports +, - and *.
   Value *EmitOverflowCheckedBinOp(const BinOpInfo &Ops);
@@ -1343,6 +1346,16 @@ static bool ShouldNullCheckClassCastValue(const CastExpr *CE) {
   return true;
 }
 
+void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type DstTy) {
+  llvm::Function *CheckF = TheModule->getFunction("__is_aU");
+  printf("Has crunch enabled\n");
+  if (!CheckF)
+    return ErrorV("Unknown function: __is_aU");
+  std::vector<Value *> ArgsV;
+  ArgsV.push_back(Src);
+  Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
+}
+
 // VisitCastExpr - Emit code for an explicit or implicit cast.  Implicit casts
 // have to handle a more broad range of conversions than explicit casts, as they
 // handle things like function to ptr-to-function decay etc.
@@ -1389,6 +1402,8 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         CGF.EmitVTablePtrCheckForCast(PT->getPointeeType(), Src,
                                       /*MayBeNull=*/true);
     }
+    if (CGF.SanOpts.has(SanitizerKind::Crunch))
+      EmitCastCheck(Src, DstTy);
 
     return Builder.CreateBitCast(Src, DstTy);
   }
