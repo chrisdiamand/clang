@@ -1318,11 +1318,14 @@ static bool ShouldNullCheckClassCastValue(const CastExpr *CE) {
   return true;
 }
 
-void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type DstTy) {
-  llvm::Function *CheckF = TheModule->getFunction("__is_aU");
+void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type *DstTy) {
+  llvm::Module &TheModule = CGF.CGM.getModule();
+  llvm::Function *CheckF = TheModule.getFunction("__is_aU");
   printf("Has crunch enabled\n");
-  if (!CheckF)
-    return ErrorV("Unknown function: __is_aU");
+  if (!CheckF) {
+    printf("Error: __is_aU not declared\n");
+    return;
+  }
   std::vector<Value *> ArgsV;
   ArgsV.push_back(Src);
   Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
