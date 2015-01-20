@@ -1348,14 +1348,21 @@ static bool ShouldNullCheckClassCastValue(const CastExpr *CE) {
 
 void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type *DstTy) {
   llvm::Module &TheModule = CGF.CGM.getModule();
-  llvm::Function *CheckF = TheModule.getFunction("__is_aU");
-  printf("Has crunch enabled\n");
-  if (!CheckF) {
-    printf("Error: __is_aU not declared\n");
-    return;
-  }
+  llvm::Type *resTy = llvm::Type::getInt32Ty(VMContext);
+  llvm::Type *argTy[2];
+  argTy[0] = llvm::Type::getInt8PtrTy(VMContext);
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(argTy), 1);
+  llvm::FunctionType *CheckT = llvm::FunctionType::get(resTy, ArgTy_ar, false);
+  llvm::Constant *CheckF = TheModule.getOrInsertFunction("__is_aU", CheckT);
+
+  assert(CheckF != NULL && "__is_aU not declared!");
+
+  // Cast the pointer to int8_t * to match __is_aU().
+  Src = Builder.CreateBitCast(Src, argTy[0]);
+
   std::vector<Value *> ArgsV;
   ArgsV.push_back(Src);
+
   Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
 }
 
