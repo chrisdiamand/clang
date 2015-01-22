@@ -2282,6 +2282,10 @@ static bool addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   // to be dynamic to be sure we export sanitizer interface functions.
   if (AddExportDynamic)
     CmdArgs.push_back("-export-dynamic");
+
+  if (TC.getSanitizerArgs().needsCrunchRt())
+    CmdArgs.push_back("-lcrunch_preload");
+
   return !StaticRuntimes.empty();
 }
 
