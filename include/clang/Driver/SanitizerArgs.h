@@ -47,6 +47,7 @@ class SanitizerArgs {
   }
   bool needsUbsanRt() const;
   bool needsDfsanRt() const { return Sanitizers.has(SanitizerKind::DataFlow); }
+  bool needsCrunchRt() const { return Sanitizers.has(SanitizerKind::Crunch); }
 
   bool requiresPIE() const;
   bool needsUnwindTables() const;
