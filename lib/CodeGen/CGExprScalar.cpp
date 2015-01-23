@@ -471,7 +471,7 @@ public:
     return Builder.CreateMul(Ops.LHS, Ops.RHS, "mul");
   }
 
-  void EmitCastCheck(Value *src, llvm::Type *DestTy);
+  void EmitCastCheck(Value *src, llvm::Type *DstTy);
   llvm::Value *GetUniqtype(llvm::Type *Ty);
 
   /// Create a binary op that checks for overflow.
@@ -1356,7 +1356,12 @@ llvm::Value *ScalarExprEmitter::GetUniqtype(llvm::Type *Ty) {
   return Builder.CreateBitCast(ret, utTy);
 }
 
+// EmitCastCheck - Emit a call to libcrunch to check if the pointer really
+// points to the the type we're casting it to.
 void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type *DstTy) {
+  if (!CGF.SanOpts.has(SanitizerKind::Crunch))
+    return;
+
   llvm::Module &TheModule = CGF.CGM.getModule();
   llvm::Type *resTy = llvm::Type::getInt32Ty(VMContext);
 
@@ -1427,8 +1432,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         CGF.EmitVTablePtrCheckForCast(PT->getPointeeType(), Src,
                                       /*MayBeNull=*/true);
     }
-    if (CGF.SanOpts.has(SanitizerKind::Crunch))
-      EmitCastCheck(Src, DstTy);
+    EmitCastCheck(Src, DstTy);
 
     return Builder.CreateBitCast(Src, DstTy);
   }
@@ -1576,7 +1580,13 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     llvm::Value* IntResult =
       Builder.CreateIntCast(Src, MiddleTy, InputSigned, "conv");
 
-    return Builder.CreateIntToPtr(IntResult, ConvertType(DestTy));
+    llvm::Type *DstTy = ConvertType(DestTy);
+    Value *Ptr = Builder.CreateIntToPtr(IntResult, DstTy);
+
+    // Do this after casting here as it does a BitCast for __is_aU().
+    EmitCastCheck(Ptr, DstTy);
+
+    return Ptr;
   }
   case CK_PointerToIntegral:
     assert(!DestTy->isBooleanType() && "bool should use PointerToBool");
