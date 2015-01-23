@@ -472,6 +472,7 @@ public:
   }
 
   void EmitCastCheck(Value *src, llvm::Type *DestTy);
+  llvm::Value *GetUniqtype(llvm::Type *Ty);
 
   /// Create a binary op that checks for overflow.
   /// Currently only supports +, - and *.
@@ -1318,14 +1319,26 @@ static bool ShouldNullCheckClassCastValue(const CastExpr *CE) {
   return true;
 }
 
+// GetUniqtype - return the correct uniqtype variable for a given type to
+// check.
+llvm::Value *ScalarExprEmitter::GetUniqtype(llvm::Type *Ty) {
+  llvm::Module &TheModule = CGF.CGM.getModule();
+  llvm::Type *utTy = llvm::Type::getInt8PtrTy(VMContext);
+  llvm::Constant *ret = TheModule.getOrInsertGlobal("__uniqtype_long", utTy);
+  return Builder.CreateBitCast(ret, utTy);
+}
+
 void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type *DstTy) {
   llvm::Module &TheModule = CGF.CGM.getModule();
   llvm::Type *resTy = llvm::Type::getInt32Ty(VMContext);
+
   llvm::Type *argTy[2];
   argTy[0] = llvm::Type::getInt8PtrTy(VMContext);
-  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(argTy), 1);
+  argTy[1] = llvm::Type::getInt8PtrTy(VMContext);
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(argTy), 2);
   llvm::FunctionType *CheckT = llvm::FunctionType::get(resTy, ArgTy_ar, false);
-  llvm::Constant *CheckF = TheModule.getOrInsertFunction("__is_aU", CheckT);
+  llvm::Constant *CheckF = TheModule.getOrInsertFunction("__is_a_internal",
+                                                         CheckT);
 
   assert(CheckF != NULL && "__is_aU not declared!");
 
@@ -1334,6 +1347,8 @@ void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type *DstTy) {
 
   std::vector<Value *> ArgsV;
   ArgsV.push_back(Src);
+
+  ArgsV.push_back(GetUniqtype(DstTy));
 
   Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
 }
