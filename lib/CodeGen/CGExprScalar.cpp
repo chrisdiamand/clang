@@ -16,6 +16,7 @@
 #include "CGDebugInfo.h"
 #include "CGObjCRuntime.h"
 #include "CodeGenModule.h"
+#include "SanitizerCrunch.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/RecordLayout.h"
@@ -470,9 +471,6 @@ public:
       return Builder.CreateFMul(Ops.LHS, Ops.RHS, "mul");
     return Builder.CreateMul(Ops.LHS, Ops.RHS, "mul");
   }
-
-  void EmitCastCheck(Value *src, llvm::Type *DstTy);
-  llvm::Value *GetUniqtype(llvm::Type *Ty);
 
   /// Create a binary op that checks for overflow.
   /// Currently only supports +, - and *.
@@ -1347,45 +1345,6 @@ static bool ShouldNullCheckClassCastValue(const CastExpr *CE) {
   return true;
 }
 
-// GetUniqtype - return the correct uniqtype variable for a given type to
-// check.
-llvm::Value *ScalarExprEmitter::GetUniqtype(llvm::Type *Ty) {
-  llvm::Module &TheModule = CGF.CGM.getModule();
-  llvm::Type *utTy = llvm::Type::getInt8PtrTy(VMContext);
-  llvm::Constant *ret = TheModule.getOrInsertGlobal("__uniqtype_long", utTy);
-  return Builder.CreateBitCast(ret, utTy);
-}
-
-// EmitCastCheck - Emit a call to libcrunch to check if the pointer really
-// points to the the type we're casting it to.
-void ScalarExprEmitter::EmitCastCheck(Value *Src, llvm::Type *DstTy) {
-  if (!CGF.SanOpts.has(SanitizerKind::Crunch))
-    return;
-
-  llvm::Module &TheModule = CGF.CGM.getModule();
-  llvm::Type *resTy = llvm::Type::getInt32Ty(VMContext);
-
-  llvm::Type *argTy[2];
-  argTy[0] = llvm::Type::getInt8PtrTy(VMContext);
-  argTy[1] = llvm::Type::getInt8PtrTy(VMContext);
-  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(argTy), 2);
-  llvm::FunctionType *CheckT = llvm::FunctionType::get(resTy, ArgTy_ar, false);
-  llvm::Constant *CheckF = TheModule.getOrInsertFunction("__is_a_internal",
-                                                         CheckT);
-
-  assert(CheckF != NULL && "__is_aU not declared!");
-
-  // Cast the pointer to int8_t * to match __is_aU().
-  Src = Builder.CreateBitCast(Src, argTy[0]);
-
-  std::vector<Value *> ArgsV;
-  ArgsV.push_back(Src);
-
-  ArgsV.push_back(GetUniqtype(DstTy));
-
-  Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
-}
-
 // VisitCastExpr - Emit code for an explicit or implicit cast.  Implicit casts
 // have to handle a more broad range of conversions than explicit casts, as they
 // handle things like function to ptr-to-function decay etc.
@@ -1432,7 +1391,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         CGF.EmitVTablePtrCheckForCast(PT->getPointeeType(), Src,
                                       /*MayBeNull=*/true);
     }
-    EmitCastCheck(Src, DstTy);
+    Crunch::EmitCastCheck(CGF, Builder, VMContext, Src, DstTy);
 
     return Builder.CreateBitCast(Src, DstTy);
   }
@@ -1584,7 +1543,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     Value *Ptr = Builder.CreateIntToPtr(IntResult, DstTy);
 
     // Do this after casting here as it does a BitCast for __is_aU().
-    EmitCastCheck(Ptr, DstTy);
+    Crunch::EmitCastCheck(CGF, Builder, VMContext, Ptr, DstTy);
 
     return Ptr;
   }
