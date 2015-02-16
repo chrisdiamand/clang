@@ -70,6 +70,7 @@ add_clang_library(clangCodeGen
   ItaniumCXXABI.cpp
   MicrosoftCXXABI.cpp
   ModuleBuilder.cpp
+  SanitizerCrunch.cpp
   SanitizerMetadata.cpp
   TargetInfo.cpp
 
