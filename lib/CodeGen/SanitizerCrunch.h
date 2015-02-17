@@ -33,7 +33,7 @@ private:
 
   llvm::Type *DstTy;
 
-  llvm::Value *GetUniqtype(llvm::Type *Ty);
+  llvm::Value *GetUniqtype(clang::QualType &);
 
 public:
   Check(clang::CodeGen::CodeGenFunction &CGF,
