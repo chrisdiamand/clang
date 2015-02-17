@@ -19,14 +19,32 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
-
-using namespace clang;
-using namespace CodeGen;
-using llvm::Value;
+#include <cstring>
 
 namespace Crunch {
 
-void EmitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
+class Check {
+private:
+  clang::CodeGen::CodeGenFunction &CGF;
+  clang::CodeGen::CGBuilderTy &Builder;
+  llvm::LLVMContext &VMContext;
+  llvm::Value *Src;
+  llvm::Type *DstTy;
+
+  llvm::Value *GetUniqtype(llvm::Type *Ty);
+
+public:
+  Check(clang::CodeGen::CodeGenFunction &CGF,
+        clang::CodeGen::CGBuilderTy &Builder,
+        llvm::LLVMContext &VMContext,
+        llvm::Value *Src, llvm::Type *DstTy) :
+    CGF(CGF), Builder(Builder), VMContext(VMContext),
+    Src(Src), DstTy(DstTy) {}
+  void Emit();
+};
+
+void EmitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
+                   clang::CodeGen::CGBuilderTy &Builder,
                    llvm::LLVMContext &VMContext,
                    llvm::Value *Src, llvm::Type *DstTy);
 
