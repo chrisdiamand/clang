@@ -28,61 +28,58 @@ using namespace CodeGen;
 
 namespace Crunch {
 
-static std::string getUniqtypeName(llvm::Type *Ty) {
+static std::string getUniqtypeName(const clang::Type *Ty) {
+  const clang::LangOptions langOpts;
+  const clang::PrintingPolicy printPol(langOpts);
+
   // Based on TypePrinting::print()
-  switch (Ty->getTypeID()) {
-  case llvm::Type::VoidTyID:    return "void";
-  case llvm::Type::HalfTyID:    return "half";
-  case llvm::Type::FloatTyID:   return "float";
-  case llvm::Type::DoubleTyID:  return "double";
+  if (Ty->isBuiltinType()) {
+    auto *BTy = static_cast<const clang::BuiltinType *>(Ty);
+    return BTy->getName(printPol).str();
 
-  case llvm::Type::IntegerTyID: {
-    int width = (static_cast<llvm::IntegerType *>(Ty))->getBitWidth();
-    /* Assume these integer types for now (since LLVM doesn't know about
-     * different C int types. */
-    switch (width) {
-    case 8:   return "char";
-    case 16:  return "short";
-    case 32:  return "int";
-    case 64:  return "long";
+  } else if (Ty->isRecordType()) {
+    auto RTy = Ty->getAsStructureType();
+    return RTy->getDecl()->getName().str();
+
+  } else if (Ty->isPointerType()) {
+    const clang::Type *PtrTy = Ty->getPointeeType().getTypePtr();
+    return "__PTR_" + getUniqtypeName(PtrTy);
+
+  } else if (Ty->isFunctionProtoType()) {
+    auto FTy = static_cast<const clang::FunctionProtoType *>(Ty);
+    assert(FTy != NULL);
+    std::string Ret = "__FUN_FROM_";
+    int NumParams = FTy->getNumParams();
+    printf("numparams = %d\n", NumParams);
+    for (int i = 0; i < NumParams; ++i) {
+      printf("ARGUMENT %d\n", i);
+      //QualType ArgType = *it;
+      Ret += "_ARG" + std::to_string(i) + "_";
+      //Ret += getUniqtypeName(ArgType.getTypePtrOrNull());
     }
+
+    fprintf(stderr, "Getting return type: ");
+    auto ReturnType = FTy->getReturnType().getTypePtrOrNull();
+    fprintf(stderr, "ptr = %p\n", ReturnType);
+    //ReturnType->dump();
+    fprintf(stderr, "Done, getting ptr:\n");
+    //std::cerr << getUniqtypeName(ReturnType);
+    //Ret += "__FUN_TO_" + getUniqtypeName(ReturnType);
+    return Ret;
   }
 
-  case llvm::Type::PointerTyID:
-    return "__PTR_" + getUniqtypeName(Ty->getPointerElementType());
-
-  case llvm::Type::StructTyID:
-    /* getStructName returns a value of the form "struct.foo", so remove the
-     * first 7 characters ('struct.') */
-    return Ty->getStructName().substr(7);
-
-  case llvm::Type::FunctionTyID: {
-    llvm::FunctionType *FTy = static_cast<llvm::FunctionType *>(Ty);
-    std::string ret = "__FUN_FROM_";
-
-    int param_num;
-    for (auto it = FTy->param_begin();
-         it != FTy->param_end(); ++FTy, ++param_num) {
-      ret += "_ARG" + std::to_string(param_num) + "_";
-      ret += getUniqtypeName(*it);
-    }
-    ret += "__FUN_TO_" + getUniqtypeName(FTy->getReturnType());
-  }
-
-  default:
-    std::cerr << "unknown: ";
-    Ty->dump();
-  }
-
-  return "<?>";
+  std::cerr << "Unknown type class: ";
+  Ty->dump();
+  return "__UNKNOWN_TYPE__";
 }
 
 // GetUniqtype - return the correct uniqtype variable for a given type to
 // check.
-llvm::Value *Check::GetUniqtype(llvm::Type *Ty) {
-  assert(DstTy->isPointerTy() && "Can't check non-pointer destination types");
+llvm::Value *Check::GetUniqtype(clang::QualType &QTy) {
+  const clang::Type *Ty = QTy.getTypePtr();
+  assert(Ty->isPointerType() && "Can't check non-pointer destination types");
 
-  llvm::Type *ptrTy = DstTy->getPointerElementType();
+  const clang::Type *ptrTy = Ty->getPointeeType().getTypePtr();
 
   std::cerr << "Converting type: ";
   ptrTy->dump();
@@ -120,7 +117,7 @@ void Check::Emit() {
   std::vector<llvm::Value *> ArgsV;
   ArgsV.push_back(Src);
 
-  ArgsV.push_back(GetUniqtype(DstTy));
+  ArgsV.push_back(GetUniqtype(DestClangTy));
 
   Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
 }
