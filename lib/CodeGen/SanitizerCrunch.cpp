@@ -28,13 +28,13 @@ using namespace CodeGen;
 
 namespace Crunch {
 
-static std::string getUniqtypeName(const clang::Type *Ty) {
-  const clang::LangOptions langOpts;
-  const clang::PrintingPolicy printPol(langOpts);
+static std::string getUniqtypeName(const clang::QualType &Ty) {
+  clang::LangOptions langOpts;
+  clang::PrintingPolicy printPol(langOpts);
 
   // Based on TypePrinting::print()
   if (Ty->isBuiltinType()) {
-    auto *BTy = static_cast<const clang::BuiltinType *>(Ty);
+    auto BTy = clang::cast<clang::BuiltinType>(Ty);
     return BTy->getName(printPol).str();
 
   } else if (Ty->isRecordType()) {
@@ -42,29 +42,21 @@ static std::string getUniqtypeName(const clang::Type *Ty) {
     return RTy->getDecl()->getName().str();
 
   } else if (Ty->isPointerType()) {
-    const clang::Type *PtrTy = Ty->getPointeeType().getTypePtr();
+    clang::QualType PtrTy = Ty->getPointeeType();
     return "__PTR_" + getUniqtypeName(PtrTy);
 
   } else if (Ty->isFunctionProtoType()) {
-    auto FTy = static_cast<const clang::FunctionProtoType *>(Ty);
-    assert(FTy != NULL);
+    auto FTy = clang::cast<const clang::FunctionProtoType>(Ty);
     std::string Ret = "__FUN_FROM_";
+
     int NumParams = FTy->getNumParams();
-    printf("numparams = %d\n", NumParams);
     for (int i = 0; i < NumParams; ++i) {
-      printf("ARGUMENT %d\n", i);
-      //QualType ArgType = *it;
-      Ret += "_ARG" + std::to_string(i) + "_";
-      //Ret += getUniqtypeName(ArgType.getTypePtrOrNull());
+      Ret += "__ARG" + std::to_string(i) + "_";
+      Ret += getUniqtypeName(FTy->getParamType(i));
     }
 
-    fprintf(stderr, "Getting return type: ");
-    auto ReturnType = FTy->getReturnType().getTypePtrOrNull();
-    fprintf(stderr, "ptr = %p\n", ReturnType);
-    //ReturnType->dump();
-    fprintf(stderr, "Done, getting ptr:\n");
-    //std::cerr << getUniqtypeName(ReturnType);
-    //Ret += "__FUN_TO_" + getUniqtypeName(ReturnType);
+    auto ReturnType = FTy->getReturnType();
+    Ret += "__FUN_TO_" + getUniqtypeName(ReturnType);
     return Ret;
   }
 
@@ -76,19 +68,18 @@ static std::string getUniqtypeName(const clang::Type *Ty) {
 // GetUniqtype - return the correct uniqtype variable for a given type to
 // check.
 llvm::Value *Check::GetUniqtype(clang::QualType &QTy) {
-  const clang::Type *Ty = QTy.getTypePtr();
-  assert(Ty->isPointerType() && "Can't check non-pointer destination types");
+  assert(QTy->isPointerType() && "Can't check non-pointer destination types");
 
-  const clang::Type *ptrTy = Ty->getPointeeType().getTypePtr();
+  clang::QualType ptrTy = QTy->getPointeeType();
+  /* Need to strip parentheses; these occur around function prototypes and mean
+   * that the QualType can't be casted directly to a FunctionProtoType. */
+  ptrTy = ptrTy.IgnoreParens();
 
-  std::cerr << "Converting type: ";
-  ptrTy->dump();
-
-  std::cout << getUniqtypeName(ptrTy) << std::endl;
+  std::string UniqtypeName = "__uniqtype__" + getUniqtypeName(ptrTy);
 
   llvm::Module &TheModule = CGF.CGM.getModule();
   llvm::Type *utTy = llvm::Type::getInt8PtrTy(VMContext);
-  llvm::Constant *ret = TheModule.getOrInsertGlobal("__uniqtype_long", utTy);
+  llvm::Constant *ret = TheModule.getOrInsertGlobal(UniqtypeName, utTy);
   return Builder.CreateBitCast(ret, utTy);
 }
 
