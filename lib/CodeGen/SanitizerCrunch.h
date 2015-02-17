@@ -29,6 +29,8 @@ private:
   clang::CodeGen::CGBuilderTy &Builder;
   llvm::LLVMContext &VMContext;
   llvm::Value *Src;
+  clang::QualType &DestClangTy;
+
   llvm::Type *DstTy;
 
   llvm::Value *GetUniqtype(llvm::Type *Ty);
@@ -37,16 +39,16 @@ public:
   Check(clang::CodeGen::CodeGenFunction &CGF,
         clang::CodeGen::CGBuilderTy &Builder,
         llvm::LLVMContext &VMContext,
-        llvm::Value *Src, llvm::Type *DstTy) :
+        llvm::Value *Src, clang::QualType &DestClangTy) :
     CGF(CGF), Builder(Builder), VMContext(VMContext),
-    Src(Src), DstTy(DstTy) {}
+    Src(Src), DestClangTy(DestClangTy) {}
   void Emit();
 };
 
 void EmitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
                    clang::CodeGen::CGBuilderTy &Builder,
                    llvm::LLVMContext &VMContext,
-                   llvm::Value *Src, llvm::Type *DstTy);
+                   llvm::Value *Src, clang::QualType &DestClangTy);
 
 } // namespace Crunch
 

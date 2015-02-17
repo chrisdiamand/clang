@@ -1358,7 +1358,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
                        "(must be an address space cast)!");
     }
 
-    Crunch::EmitCastCheck(CGF, Builder, VMContext, Src, DstTy);
+    Crunch::EmitCastCheck(CGF, Builder, VMContext, Src, DestTy);
 
     return Builder.CreateBitCast(Src, DstTy);
   }
@@ -1506,7 +1506,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     Value *Ptr = Builder.CreateIntToPtr(IntResult, DstTy);
 
     // Do this after casting here as it does a BitCast for __is_aU().
-    Crunch::EmitCastCheck(CGF, Builder, VMContext, Ptr, DstTy);
+    Crunch::EmitCastCheck(CGF, Builder, VMContext, Ptr, DestTy);
 
     return Ptr;
   }

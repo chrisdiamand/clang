@@ -25,7 +25,6 @@
 
 using namespace clang;
 using namespace CodeGen;
-using llvm::Value;
 
 namespace Crunch {
 
@@ -100,6 +99,8 @@ void Check::Emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch))
     return;
 
+  DstTy = CGF.ConvertType(DestClangTy);
+
   llvm::Module &TheModule = CGF.CGM.getModule();
   llvm::Type *resTy = llvm::Type::getInt32Ty(VMContext);
 
@@ -116,7 +117,7 @@ void Check::Emit() {
   // Cast the pointer to int8_t * to match __is_aU().
   Src = Builder.CreateBitCast(Src, argTy[0]);
 
-  std::vector<Value *> ArgsV;
+  std::vector<llvm::Value *> ArgsV;
   ArgsV.push_back(Src);
 
   ArgsV.push_back(GetUniqtype(DstTy));
@@ -126,9 +127,9 @@ void Check::Emit() {
 
 void EmitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
                    llvm::LLVMContext &VMContext,
-                   Value *Src, llvm::Type *DstTy)
+                   llvm::Value *Src, clang::QualType &DestClangTy)
 {
-  Check c(CGF, Builder, VMContext, Src, DstTy);
+  Check c(CGF, Builder, VMContext, Src, DestClangTy);
   c.Emit();
 }
 
