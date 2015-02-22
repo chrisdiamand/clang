@@ -50,6 +50,14 @@ static std::string parseType(const clang::QualType &Ty,
     }
     Ret = BTy->getName(printPol).str();
 
+    /* HACK: Libcrunch doesn't abbreviate 'short int' to 'short' (and so on),
+     * so we need to add it in. */
+    if (BTy->isIntegerType()) {
+      if (Ret != "int") {
+        Ret = Ret + "_int";
+      }
+    }
+
   } else if (Ty->isRecordType()) {
     auto RTy = Ty->getAsStructureType();
     Ret = RTy->getDecl()->getName().str();
