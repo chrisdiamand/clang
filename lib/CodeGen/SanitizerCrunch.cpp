@@ -32,11 +32,12 @@ namespace Crunch {
  * represent that type, and finding out which libcrunch function needs to be
  * called to check it. */
 static std::string parseType(const clang::QualType &Ty,
-                             CheckFunctionKind *CheckFunResult)
+                             CheckFunctionKind *CheckFunResult,
+                             int *PointerDegree)
 {
   clang::LangOptions langOpts;
   clang::PrintingPolicy printPol(langOpts);
-  CheckFunctionKind CheckFunKind = CT_Unknown;
+  CheckFunctionKind CheckFunKind = CT_IsA;
   std::string Ret = "__UNKNOWN_TYPE__";
 
   // Based on TypePrinting::print()
@@ -56,7 +57,11 @@ static std::string parseType(const clang::QualType &Ty,
 
   } else if (Ty->isPointerType()) {
     clang::QualType PtrTy = Ty->getPointeeType();
-    Ret = "__PTR_" + parseType(PtrTy, &CheckFunKind);
+    Ret = "__PTR_" + parseType(PtrTy, &CheckFunKind, nullptr);
+
+    if (PointerDegree != nullptr) {
+      *PointerDegree += 1;
+    }
 
   } else if (Ty->isFunctionProtoType()) {
     auto FTy = clang::cast<const clang::FunctionProtoType>(Ty);
@@ -65,11 +70,11 @@ static std::string parseType(const clang::QualType &Ty,
     int NumParams = FTy->getNumParams();
     for (int i = 0; i < NumParams; ++i) {
       Ret += "__ARG" + std::to_string(i) + "_";
-      Ret += parseType(FTy->getParamType(i), nullptr);
+      Ret += parseType(FTy->getParamType(i), nullptr, nullptr);
     }
 
     auto ReturnType = FTy->getReturnType();
-    Ret += "__FUN_TO_" + parseType(ReturnType, nullptr);
+    Ret += "__FUN_TO_" + parseType(ReturnType, nullptr, nullptr);
     CheckFunKind = CT_FunctionRefining;
 
   } else {
@@ -87,11 +92,25 @@ static std::string parseType(const clang::QualType &Ty,
 // GetUniqtype - return the correct uniqtype variable for a given type to
 // check.
 llvm::Value *Check::getUniqtypeVariable() {
-  std::string UniqtypeName = "__uniqtype__" + CrunchTypeName;
+  switch (CheckFunKind) {
+    case CT_IsA:
+    case CT_FunctionRefining: {
+      std::string UniqtypeName = "__uniqtype__" + CrunchTypeName;
 
-  llvm::Type *utTy = llvm::Type::getInt8PtrTy(VMContext);
-  llvm::Constant *ret = getModule().getOrInsertGlobal(UniqtypeName, utTy);
-  return Builder.CreateBitCast(ret, utTy);
+      llvm::Type *utTy = llvm::Type::getInt8PtrTy(VMContext);
+      llvm::Constant *ret = getModule().getOrInsertGlobal(UniqtypeName, utTy);
+      return Builder.CreateBitCast(ret, utTy);
+    }
+
+    case CT_Named:
+      return llvm::ConstantDataArray::getString(VMContext, CrunchTypeName);
+
+    case CT_PointerOfDegree:
+      return llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext),
+                                    PointerDegree);
+  }
+
+  return nullptr;
 }
 
 Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
@@ -107,33 +126,36 @@ Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
    * that the QualType can't be casted directly to a FunctionProtoType. */
   PointeeTy = PointeeTy.IgnoreParens();
 
-  CrunchTypeName = parseType(PointeeTy, &CheckFunKind);
+  PointerDegree = 0;
+  CrunchTypeName = parseType(PointeeTy, &CheckFunKind, &PointerDegree);
 }
 
-llvm::Constant *Check::getCheckFunction() {
-  llvm::Constant *Ret = nullptr;
-  llvm::Type *ArgTy[2], *ResTy;
-  auto ArgTyPtr = const_cast<llvm::Type **>(ArgTy);
-  llvm::FunctionType *FunTy;
-  llvm::Module &TheModule = getModule();
-
-  switch (CheckFunKind) {
-  case CT_Unknown:
-    return nullptr;
-
-  default:
-  case CT_IsA: {
-      ResTy = llvm::Type::getInt32Ty(VMContext);
-
-      ArgTy[0] = llvm::Type::getInt8PtrTy(VMContext);
-      ArgTy[1] = llvm::Type::getInt8PtrTy(VMContext);
-      llvm::ArrayRef<llvm::Type *> ArgTy_ar(ArgTyPtr, 2);
-      FunTy = llvm::FunctionType::get(ResTy, ArgTy_ar, false);
-      Ret = TheModule.getOrInsertFunction("__is_a_internal", FunTy);
-
-      break;
-    }
+static std::string getCheckFunctionName(CheckFunctionKind Kind) {
+  switch (Kind) {
+    case CT_IsA:                return "__is_a_internal";
+    case CT_Named:              return "__named_a_internal";
+    case CT_PointerOfDegree:    return "__is_a_pointer_of_degree_internal";
+    case CT_FunctionRefining:   return "__is_a_function_refining_internal";
   }
+  assert(false && "Invalid CheckFunctionKind");
+  return "ERROR";
+}
+
+llvm::Constant *Check::getCheckFunction(llvm::Type *SecondArg) {
+  llvm::Constant *Ret = nullptr;
+  llvm::Type *ArgTy[2];
+  llvm::Module &TheModule = getModule();
+  llvm::Type *ResTy = llvm::Type::getInt32Ty(VMContext);
+  std::string FunName = getCheckFunctionName(CheckFunKind);
+
+  // The first argument is always the pointer to be checked.
+  ArgTy[0] = llvm::Type::getInt8PtrTy(VMContext);
+  ArgTy[1] = SecondArg;
+
+  auto ArgTyPtr = const_cast<llvm::Type **>(ArgTy);
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(ArgTyPtr, 2);
+  llvm::FunctionType *FunTy = llvm::FunctionType::get(ResTy, ArgTy_ar, false);
+  Ret = TheModule.getOrInsertFunction(FunName, FunTy);
 
   return Ret;
 }
@@ -142,15 +164,16 @@ void Check::Emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch))
     return;
 
-  llvm::Constant *CheckFun = getCheckFunction();
-
   // Cast the pointer to int8_t * to match __is_aU().
   Src = Builder.CreateBitCast(Src, llvm::Type::getInt8PtrTy(VMContext));
 
   std::vector<llvm::Value *> ArgsV;
   ArgsV.push_back(Src);
 
-  ArgsV.push_back(getUniqtypeVariable());
+  llvm::Value *Uniqtype = getUniqtypeVariable();
+  llvm::Constant *CheckFun = getCheckFunction(Uniqtype->getType());
+
+  ArgsV.push_back(Uniqtype);
 
   Builder.CreateCall(CheckFun, ArgsV, "crunchcheck");
 }
