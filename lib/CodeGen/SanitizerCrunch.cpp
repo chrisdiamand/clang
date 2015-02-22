@@ -28,59 +28,88 @@ using namespace CodeGen;
 
 namespace Crunch {
 
-static std::string getUniqtypeName(const clang::QualType &Ty) {
+/* Recurse down the type structure, returning the string used by libcrunch to
+ * represent that type, and finding out which libcrunch function needs to be
+ * called to check it. */
+static std::string parseType(const clang::QualType &Ty,
+                             CheckFunction *CheckFunPtr)
+{
   clang::LangOptions langOpts;
   clang::PrintingPolicy printPol(langOpts);
+  CheckFunction CheckFun = CT_Unknown;
+  std::string Ret = "__UNKNOWN_TYPE__";
 
   // Based on TypePrinting::print()
   if (Ty->isBuiltinType()) {
     auto BTy = clang::cast<clang::BuiltinType>(Ty);
-    return BTy->getName(printPol).str();
+    if (BTy->isVoidType()) {
+      CheckFun = CT_PointerOfDegree;
+    } else {
+      CheckFun = CT_IsA;
+    }
+    Ret = BTy->getName(printPol).str();
 
   } else if (Ty->isRecordType()) {
     auto RTy = Ty->getAsStructureType();
-    return RTy->getDecl()->getName().str();
+    Ret = RTy->getDecl()->getName().str();
+    CheckFun = CT_Named;
 
   } else if (Ty->isPointerType()) {
     clang::QualType PtrTy = Ty->getPointeeType();
-    return "__PTR_" + getUniqtypeName(PtrTy);
+    Ret = "__PTR_" + parseType(PtrTy, &CheckFun);
 
   } else if (Ty->isFunctionProtoType()) {
     auto FTy = clang::cast<const clang::FunctionProtoType>(Ty);
-    std::string Ret = "__FUN_FROM_";
+    Ret = "__FUN_FROM_";
 
     int NumParams = FTy->getNumParams();
     for (int i = 0; i < NumParams; ++i) {
       Ret += "__ARG" + std::to_string(i) + "_";
-      Ret += getUniqtypeName(FTy->getParamType(i));
+      Ret += parseType(FTy->getParamType(i), nullptr);
     }
 
     auto ReturnType = FTy->getReturnType();
-    Ret += "__FUN_TO_" + getUniqtypeName(ReturnType);
-    return Ret;
+    Ret += "__FUN_TO_" + parseType(ReturnType, nullptr);
+    CheckFun = CT_FunctionRefining;
+
+  } else {
+    std::cerr << "Unknown type class: ";
+    Ty->dump();
   }
 
-  std::cerr << "Unknown type class: ";
-  Ty->dump();
-  return "__UNKNOWN_TYPE__";
+  if (CheckFunPtr != nullptr) {
+    *CheckFunPtr = CheckFun;
+  }
+
+  return Ret;
 }
 
 // GetUniqtype - return the correct uniqtype variable for a given type to
 // check.
-llvm::Value *Check::GetUniqtype(clang::QualType &QTy) {
-  assert(QTy->isPointerType() && "Can't check non-pointer destination types");
-
-  clang::QualType ptrTy = QTy->getPointeeType();
-  /* Need to strip parentheses; these occur around function prototypes and mean
-   * that the QualType can't be casted directly to a FunctionProtoType. */
-  ptrTy = ptrTy.IgnoreParens();
-
-  std::string UniqtypeName = "__uniqtype__" + getUniqtypeName(ptrTy);
+llvm::Value *Check::getUniqtypeVariable(clang::QualType &QTy) {
+  std::string UniqtypeName = "__uniqtype__" + CrunchTypeName;
 
   llvm::Module &TheModule = CGF.CGM.getModule();
   llvm::Type *utTy = llvm::Type::getInt8PtrTy(VMContext);
   llvm::Constant *ret = TheModule.getOrInsertGlobal(UniqtypeName, utTy);
   return Builder.CreateBitCast(ret, utTy);
+}
+
+Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
+             clang::CodeGen::CGBuilderTy &_Builder,
+             llvm::LLVMContext &_VMContext,
+             llvm::Value *_Src, clang::QualType &_DestClangTy) :
+  CGF(_CGF), Builder(_Builder), VMContext(_VMContext),
+  Src(_Src), DestClangTy(_DestClangTy)
+{
+
+  assert(DestClangTy->isPointerType() && "Can't check non-pointer destination types");
+  PointeeTy = DestClangTy->getPointeeType();
+  /* Need to strip parentheses; these occur around function prototypes and mean
+   * that the QualType can't be casted directly to a FunctionProtoType. */
+  PointeeTy = PointeeTy.IgnoreParens();
+
+  CrunchTypeName = parseType(PointeeTy, &CheckFun);
 }
 
 void Check::Emit() {
@@ -108,7 +137,7 @@ void Check::Emit() {
   std::vector<llvm::Value *> ArgsV;
   ArgsV.push_back(Src);
 
-  ArgsV.push_back(GetUniqtype(DestClangTy));
+  ArgsV.push_back(getUniqtypeVariable(DestClangTy));
 
   Builder.CreateCall(CheckF, ArgsV, "crunchcheck");
 }

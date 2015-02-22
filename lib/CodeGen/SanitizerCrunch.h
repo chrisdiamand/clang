@@ -23,25 +23,36 @@
 
 namespace Crunch {
 
+// Which libcrunch function we need to call to check this type.
+enum CheckFunction {
+  CT_Unknown,
+  CT_IsA,
+  CT_Named,
+  CT_PointerOfDegree,
+  CT_FunctionRefining
+};
+
 class Check {
 private:
   clang::CodeGen::CodeGenFunction &CGF;
   clang::CodeGen::CGBuilderTy &Builder;
   llvm::LLVMContext &VMContext;
   llvm::Value *Src;
-  clang::QualType &DestClangTy;
 
+  clang::QualType &DestClangTy;
+  clang::QualType PointeeTy;
   llvm::Type *DstTy;
 
-  llvm::Value *GetUniqtype(clang::QualType &);
+  CheckFunction CheckFun;
+  std::string CrunchTypeName;
+
+  llvm::Value *getUniqtypeVariable(clang::QualType &);
 
 public:
   Check(clang::CodeGen::CodeGenFunction &CGF,
         clang::CodeGen::CGBuilderTy &Builder,
         llvm::LLVMContext &VMContext,
-        llvm::Value *Src, clang::QualType &DestClangTy) :
-    CGF(CGF), Builder(Builder), VMContext(VMContext),
-    Src(Src), DestClangTy(DestClangTy) {}
+        llvm::Value *Src, clang::QualType &DestClangTy);
   void Emit();
 };
 
