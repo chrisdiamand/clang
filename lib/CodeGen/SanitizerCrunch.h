@@ -25,7 +25,6 @@ namespace Crunch {
 
 // Which libcrunch function we need to call to check this type.
 enum CheckFunctionKind {
-  CT_Unknown,
   CT_IsA,
   CT_Named,
   CT_PointerOfDegree,
@@ -49,9 +48,10 @@ private:
 
   CheckFunctionKind CheckFunKind;
   std::string CrunchTypeName;
+  int PointerDegree;
 
   llvm::Value *getUniqtypeVariable();
-  llvm::Constant *getCheckFunction();
+  llvm::Constant *getCheckFunction(llvm::Type *);
 
 public:
   Check(clang::CodeGen::CodeGenFunction &CGF,
