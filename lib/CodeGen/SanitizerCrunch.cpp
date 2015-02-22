@@ -160,7 +160,7 @@ llvm::Constant *Check::getCheckFunction(llvm::Type *SecondArg) {
   return Ret;
 }
 
-void Check::Emit() {
+void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch))
     return;
 
@@ -178,12 +178,12 @@ void Check::Emit() {
   Builder.CreateCall(CheckFun, ArgsV, "crunchcheck");
 }
 
-void EmitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
+void emitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
                    llvm::LLVMContext &VMContext,
                    llvm::Value *Src, clang::QualType &DestClangTy)
 {
   Check c(CGF, Builder, VMContext, Src, DestClangTy);
-  c.Emit();
+  c.emit();
 }
 
 } // namespace Crunch

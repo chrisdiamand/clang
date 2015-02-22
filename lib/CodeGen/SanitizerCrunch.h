@@ -58,10 +58,10 @@ public:
         clang::CodeGen::CGBuilderTy &Builder,
         llvm::LLVMContext &VMContext,
         llvm::Value *Src, clang::QualType &DestClangTy);
-  void Emit();
+  void emit();
 };
 
-void EmitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
+void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
                    clang::CodeGen::CGBuilderTy &Builder,
                    llvm::LLVMContext &VMContext,
                    llvm::Value *Src, clang::QualType &DestClangTy);
