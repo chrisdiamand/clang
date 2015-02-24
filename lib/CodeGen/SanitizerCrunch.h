@@ -36,6 +36,7 @@ private:
 
   llvm::Value *getUniqtypeVariable();
   llvm::Constant *getCheckFunction(llvm::Type *);
+  void emitAssert(llvm::Value *);
 
 public:
   Check(clang::CodeGen::CodeGenFunction &CGF,
