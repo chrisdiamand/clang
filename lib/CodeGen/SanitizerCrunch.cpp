@@ -156,6 +156,32 @@ llvm::Constant *Check::getCheckFunction(llvm::Type *SecondArg) {
   return Ret;
 }
 
+void Check::emitAssert(llvm::Value *Pred) {
+  std::string Message = getCheckFunctionName(CheckFunKind)
+                      + "(?, " + CrunchTypeName + ")";
+
+  llvm::Value *Args[5];
+  Args[0] = Pred;
+  Args[1] = llvm::ConstantDataArray::getString(VMContext, Message);
+  // FIXME: Actually find out the file/line number/function.
+  Args[2] = llvm::ConstantDataArray::getString(VMContext, "some_file.c");
+  Args[3] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext), 123);
+  Args[4] = llvm::ConstantDataArray::getString(VMContext, "some_function");
+
+  llvm::Type *ArgTy[5];
+  for (unsigned int i = 0; i < 5; ++i) {
+    ArgTy[i] = Args[i]->getType();
+  }
+  llvm::Type *ResTy = llvm::Type::getVoidTy(VMContext);
+
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(ArgTy), 5);
+  llvm::FunctionType *FunTy = llvm::FunctionType::get(ResTy, ArgTy_ar, false);
+
+  llvm::Constant *AssertFun = getModule().getOrInsertFunction("__inline_assert",
+                                                              FunTy);
+  Builder.CreateCall(AssertFun, Args);
+}
+
 void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch))
     return;
@@ -171,7 +197,9 @@ void Check::emit() {
 
   ArgsV.push_back(Uniqtype);
 
-  Builder.CreateCall(CheckFun, ArgsV, "crunchcheck");
+  llvm::Value *CheckRet = Builder.CreateCall(CheckFun, ArgsV, "crunch_check");
+
+  emitAssert(CheckRet);
 }
 
 void emitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
