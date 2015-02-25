@@ -21,13 +21,14 @@ private:
   clang::CodeGen::CodeGenFunction &CGF;
   clang::CodeGen::CGBuilderTy &Builder;
   llvm::LLVMContext &VMContext;
+  clang::Expr *ClangSrc;
   llvm::Value *Src;
+  clang::QualType &DestClangTy;
 
   inline llvm::Module &getModule() {
     return CGF.CGM.getModule();
   }
 
-  clang::QualType &DestClangTy;
   clang::QualType PointeeTy;
   llvm::Type *DstTy;
 
@@ -40,16 +41,16 @@ private:
   void emitAssert(llvm::Value *);
 
 public:
-  Check(clang::CodeGen::CodeGenFunction &CGF,
-        clang::CodeGen::CGBuilderTy &Builder,
-        llvm::LLVMContext &VMContext,
-        llvm::Value *Src, clang::QualType &DestClangTy);
+  Check(clang::CodeGen::CodeGenFunction &_CGF,
+        clang::CodeGen::CGBuilderTy &_Builder,
+        llvm::LLVMContext &_VMContext, clang::Expr *_ClangSrc,
+        llvm::Value *_Src, clang::QualType &_DestClangTy);
   void emit();
 };
 
 void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
                    clang::CodeGen::CGBuilderTy &Builder,
-                   llvm::LLVMContext &VMContext,
+                   llvm::LLVMContext &VMContext, clang::Expr *ClangSrc,
                    llvm::Value *Src, clang::QualType &DestClangTy);
 
 } // namespace Crunch

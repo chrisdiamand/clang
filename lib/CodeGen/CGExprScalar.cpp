@@ -1391,7 +1391,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         CGF.EmitVTablePtrCheckForCast(PT->getPointeeType(), Src,
                                       /*MayBeNull=*/true);
     }
-    Crunch::emitCastCheck(CGF, Builder, VMContext, Src, DestTy);
+    Crunch::emitCastCheck(CGF, Builder, VMContext, E, Src, DestTy);
 
     return Builder.CreateBitCast(Src, DstTy);
   }
@@ -1543,7 +1543,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     Value *Ptr = Builder.CreateIntToPtr(IntResult, DstTy);
 
     // Do this after casting here as it does a BitCast for __is_aU().
-    Crunch::emitCastCheck(CGF, Builder, VMContext, Ptr, DestTy);
+    Crunch::emitCastCheck(CGF, Builder, VMContext, E, Ptr, DestTy);
 
     return Ptr;
   }

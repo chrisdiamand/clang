@@ -6,6 +6,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Module.h"
+
 #include <cstring>
 #include <iostream>
 
@@ -134,10 +135,10 @@ llvm::Value *Check::getUniqtypeVariable() {
 
 Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
              clang::CodeGen::CGBuilderTy &_Builder,
-             llvm::LLVMContext &_VMContext,
+             llvm::LLVMContext &_VMContext, clang::Expr *_ClangSrc,
              llvm::Value *_Src, clang::QualType &_DestClangTy) :
   CGF(_CGF), Builder(_Builder), VMContext(_VMContext),
-  Src(_Src), DestClangTy(_DestClangTy)
+  ClangSrc(_ClangSrc), Src(_Src), DestClangTy(_DestClangTy)
 {
   assert(DestClangTy->isPointerType() && "Can't check non-pointer destination types");
   PointeeTy = DestClangTy->getPointeeType();
@@ -188,8 +189,12 @@ void Check::emitAssert(llvm::Value *Pred) {
   Args[0] = Pred;
   Args[1] = llvm::ConstantDataArray::getString(VMContext, Message);
   // FIXME: Actually find out the file/line number/function.
-  Args[2] = llvm::ConstantDataArray::getString(VMContext, "some_file.c");
-  Args[3] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext), 123);
+  clang::SourceLocation Loc = ClangSrc->getExprLoc();
+  clang::SourceManager &SM = CGF.getContext().getSourceManager();
+  Args[2] = llvm::ConstantDataArray::getString(VMContext,
+                                               SM.getBufferName(Loc));
+  Args[3] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext),
+                                   SM.getPresumedLineNumber(Loc));
   Args[4] = llvm::ConstantDataArray::getString(VMContext, "some_function");
 
   llvm::Type *ArgTy[5];
@@ -227,10 +232,10 @@ void Check::emit() {
 }
 
 void emitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
-                   llvm::LLVMContext &VMContext,
+                   llvm::LLVMContext &VMContext, clang::Expr *ClangSrc,
                    llvm::Value *Src, clang::QualType &DestClangTy)
 {
-  Check c(CGF, Builder, VMContext, Src, DestClangTy);
+  Check c(CGF, Builder, VMContext, ClangSrc, Src, DestClangTy);
   c.emit();
 }
 
