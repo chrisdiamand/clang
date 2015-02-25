@@ -19,9 +19,9 @@ namespace Crunch {
 /* Recurse down the type structure, returning the string used by libcrunch to
  * represent that type, and finding out which libcrunch function needs to be
  * called to check it. */
-static std::string parseType(const clang::QualType &Ty,
-                             CheckFunctionKind *CheckFunResult,
-                             int *PointerDegree)
+static std::string parseType_actual(const clang::QualType &Ty,
+                                    CheckFunctionKind *CheckFunResult,
+                                    int *PointerDegree)
 {
   clang::LangOptions langOpts;
   clang::PrintingPolicy printPol(langOpts);
@@ -53,7 +53,7 @@ static std::string parseType(const clang::QualType &Ty,
 
   } else if (Ty->isPointerType()) {
     clang::QualType PtrTy = Ty->getPointeeType();
-    Ret = "__PTR_" + parseType(PtrTy, &CheckFunKind, nullptr);
+    Ret = "__PTR_" + parseType_actual(PtrTy, &CheckFunKind, nullptr);
 
     if (PointerDegree != nullptr) {
       *PointerDegree += 1;
@@ -66,11 +66,11 @@ static std::string parseType(const clang::QualType &Ty,
     int NumParams = FTy->getNumParams();
     for (int i = 0; i < NumParams; ++i) {
       Ret += "__ARG" + std::to_string(i) + "_";
-      Ret += parseType(FTy->getParamType(i), nullptr, nullptr);
+      Ret += parseType_actual(FTy->getParamType(i), nullptr, nullptr);
     }
 
     auto ReturnType = FTy->getReturnType();
-    Ret += "__FUN_TO_" + parseType(ReturnType, nullptr, nullptr);
+    Ret += "__FUN_TO_" + parseType_actual(ReturnType, nullptr, nullptr);
     CheckFunKind = CT_FunctionRefining;
 
   } else {
@@ -85,10 +85,33 @@ static std::string parseType(const clang::QualType &Ty,
   return Ret;
 }
 
+// Wrapper to skip checks to 'void *' and 'char *'.
+static std::string parseType(const clang::QualType &Ty,
+                             CheckFunctionKind *CheckFunResult,
+                             int *PointerDegree)
+{
+  if (PointerDegree) {
+    *PointerDegree = 0;
+  }
+
+  if (CheckFunResult) {
+    *CheckFunResult = CT_NoCheck;
+  }
+
+  if (!Ty->isVoidType() && !Ty->isCharType()) {
+    return parseType_actual(Ty, CheckFunResult, PointerDegree);
+  }
+
+  return "ERROR";
+}
+
 // GetUniqtype - return the correct uniqtype variable for a given type to
 // check.
 llvm::Value *Check::getUniqtypeVariable() {
   switch (CheckFunKind) {
+    case CT_NoCheck:
+      return nullptr;
+
     case CT_IsA:
     case CT_FunctionRefining: {
       std::string UniqtypeName = "__uniqtype__" + CrunchTypeName;
@@ -128,6 +151,7 @@ Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
 
 static std::string getCheckFunctionName(CheckFunctionKind Kind) {
   switch (Kind) {
+    case CT_NoCheck:            return "__no_check";
     case CT_IsA:                return "__is_a_internal";
     case CT_Named:              return "__named_a_internal";
     case CT_PointerOfDegree:    return "__is_a_pointer_of_degree_internal";
@@ -183,7 +207,7 @@ void Check::emitAssert(llvm::Value *Pred) {
 }
 
 void Check::emit() {
-  if (!CGF.SanOpts.has(SanitizerKind::Crunch))
+  if (!CGF.SanOpts.has(SanitizerKind::Crunch) || CheckFunKind == CT_NoCheck)
     return;
 
   // Cast the pointer to int8_t * to match __is_aU().

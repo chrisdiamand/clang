@@ -9,6 +9,7 @@ namespace Crunch {
 
 // Which libcrunch function we need to call to check this type.
 enum CheckFunctionKind {
+  CT_NoCheck,
   CT_IsA,
   CT_Named,
   CT_PointerOfDegree,
