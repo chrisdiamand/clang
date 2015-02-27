@@ -16,7 +16,7 @@
 #include "CGDebugInfo.h"
 #include "CGObjCRuntime.h"
 #include "CodeGenModule.h"
-#include "SanitizerCrunch.h"
+#include "Crunch/Crunch.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/RecordLayout.h"

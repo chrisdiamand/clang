@@ -10,7 +10,7 @@
 #include <cstring>
 #include <iostream>
 
-#include "SanitizerCrunch.h"
+#include "Crunch/Crunch.h"
 
 using namespace clang;
 using namespace CodeGen;
