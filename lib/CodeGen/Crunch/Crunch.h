@@ -30,7 +30,6 @@ private:
   }
 
   clang::QualType PointeeTy;
-  llvm::Type *DstTy;
 
   CheckFunctionKind CheckFunKind;
   std::string CrunchTypeName;
@@ -52,6 +51,9 @@ void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
                    clang::CodeGen::CGBuilderTy &Builder,
                    llvm::LLVMContext &VMContext, clang::Expr *ClangSrc,
                    llvm::Value *Src, clang::QualType &DestClangTy);
+
+void visitAllocSite(clang::CodeGen::CodeGenFunction &,
+                    clang::CallExpr *);
 
 } // namespace Crunch
 

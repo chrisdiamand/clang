@@ -320,9 +320,11 @@ public:
   }
   Value *VisitCastExpr(CastExpr *E);
 
-  Value *VisitCallExpr(const CallExpr *E) {
+  Value *VisitCallExpr(CallExpr *E) {
     if (E->getCallReturnType()->isReferenceType())
       return EmitLoadOfLValue(E);
+
+    Crunch::visitAllocSite(CGF, E);
 
     Value *V = CGF.EmitCallExpr(E).getScalarVal();
 
