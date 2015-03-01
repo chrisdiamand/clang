@@ -94,6 +94,14 @@ void AllocSite::getSourceLoc() {
   SourceRealPath = realpath(SourceFName.c_str(), NULL);
 }
 
+static clang::Type *getVoidType() {
+  static clang::BuiltinType *VoidType = nullptr;
+  if (VoidType == nullptr) {
+    VoidType = new clang::BuiltinType(clang::BuiltinType::Void);
+  }
+  return VoidType;
+}
+
 AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
                      clang::CallExpr *_Site) :
                       CGF(_CGF), Site(_Site)
@@ -131,7 +139,9 @@ AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
     clang::SourceLocation Location = Site->getExprLoc();
     diagEngine.Report(Location, diagID);
 
-    valid = false;
+    clang::QualType VoidType(getVoidType(), 0U);
+    Type = VoidType;
+    valid = true;
   } else {
     valid = true;
     Type = Visitor->getType();
@@ -148,9 +158,6 @@ void AllocSite::emitIfValid(void) {
   if (!valid) {
     return;
   }
-
-  std::string FName = getOutputFName();
-  std::cout << FName << "!!!" << std::endl;
 
   std::ofstream Out(getOutputFName(), ios::out | ios::app);
   Out << SourceRealPath << "\t" << SourceLine << "\t" << FunName << "\t";
