@@ -154,15 +154,25 @@ std::string AllocSite::getOutputFName() {
   return ExtRemoved + ".i.allocs";
 }
 
+std::ofstream *AllocSite::openOutputFile(void) {
+  static std::map<std::string, std::ofstream *> OpenFiles;
+  std::string FName = getOutputFName();
+
+  // FIXME: Where do these get closed?
+  if (OpenFiles.find(FName) == OpenFiles.end()) {
+    OpenFiles[FName] = new std::ofstream(FName, ios::out | ios::trunc);
+  }
+  return OpenFiles[FName];
+}
+
 void AllocSite::emitIfValid(void) {
   if (!valid) {
     return;
   }
 
-  std::ofstream Out(getOutputFName(), ios::out | ios::app);
+  std::ofstream &Out = *openOutputFile();
   Out << SourceRealPath << "\t" << SourceLine << "\t" << FunName << "\t";
   Out << getUniqtypeName(Type) << std::endl;
-  Out.close();
 }
 
 AllocSite::~AllocSite() {
