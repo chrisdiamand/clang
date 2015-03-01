@@ -55,6 +55,8 @@ void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
 void visitAllocSite(clang::CodeGen::CodeGenFunction &,
                     clang::CallExpr *);
 
+std::string getUniqtypeName(const clang::QualType &);
+
 } // namespace Crunch
 
 #endif

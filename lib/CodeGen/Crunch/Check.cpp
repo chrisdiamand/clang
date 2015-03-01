@@ -106,6 +106,10 @@ static std::string parseType(const clang::QualType &Ty,
   return "ERROR";
 }
 
+std::string getUniqtypeName(const clang::QualType &Ty) {
+  return "__uniqtype__" + parseType_actual(Ty, nullptr, nullptr);
+}
+
 // GetUniqtype - return the correct uniqtype variable for a given type to
 // check.
 llvm::Value *Check::getUniqtypeVariable() {

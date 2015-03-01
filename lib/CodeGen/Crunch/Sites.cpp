@@ -154,7 +154,7 @@ void AllocSite::emitIfValid(void) {
 
   std::ofstream Out(getOutputFName(), ios::out | ios::app);
   Out << SourceRealPath << "\t" << SourceLine << "\t" << FunName << "\t";
-  Out << "__bla" << std::endl;
+  Out << getUniqtypeName(Type) << std::endl;
   Out.close();
 }
 
