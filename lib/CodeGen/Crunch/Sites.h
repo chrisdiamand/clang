@@ -1,9 +1,11 @@
 #ifndef LLVM_CLANG_LIB_CODEGEN_CRUNCH_SITES_H
 #define LLVM_CLANG_LIB_CODEGEN_CRUNCH_SITES_H
 
+#include <cstring>
+#include <fstream>
+
 #include "CodeGenFunction.h"
 #include "CodeGenModule.h"
-#include <cstring>
 
 namespace Crunch {
 
@@ -21,6 +23,7 @@ private:
 
     std::string getOutputFName(void);
     void getSourceLoc(void);
+    std::ofstream *openOutputFile(void);
 
 public:
     AllocSite(clang::CodeGen::CodeGenFunction &, clang::CallExpr *);
