@@ -119,7 +119,8 @@ AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
                      clang::CallExpr *_Site) :
                       CGF(_CGF), Site(_Site)
 {
-  if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch)) {
+  if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch) &&
+      !CGF.SanOpts.has(clang::SanitizerKind::Allocs)) {
     valid = false;
     return;
   }
@@ -195,6 +196,11 @@ AllocSite::~AllocSite() {
 void visitAllocSite(clang::CodeGen::CodeGenFunction &CGF,
                     clang::CallExpr *Site)
 {
+  if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch) &&
+      !CGF.SanOpts.has(clang::SanitizerKind::Allocs)) {
+    return;
+  }
+
   AllocSite *AS = new AllocSite(CGF, Site);
   AS->emitIfValid();
   delete AS;

@@ -42,6 +42,7 @@
 SANITIZER("address", Address)
 
 // CrunchSanitizer
+SANITIZER("allocs", Allocs)
 SANITIZER("crunch", Crunch)
 
 // MemorySanitizer
