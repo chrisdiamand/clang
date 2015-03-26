@@ -101,7 +101,8 @@ static AllocFunction *getAllocFunction(std::string Name) {
 void AllocSite::getSourceLoc() {
   clang::SourceLocation Loc = Site->getExprLoc();
   clang::SourceManager &SM = CGF.getContext().getSourceManager();
-  SourceFName = SM.getBufferName(Loc);
+
+  SourceFName = SM.getPresumedLoc(Loc).getFilename();
   SourceLine = SM.getPresumedLineNumber(Loc);
 
   SourceRealPath = realpath(SourceFName.c_str(), NULL);
