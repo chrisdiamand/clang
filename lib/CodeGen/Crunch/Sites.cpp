@@ -83,8 +83,10 @@ static void registerAllocFunctions(void) {
   if (AllocFunctions.size() != 0) {
     return;
   }
-  registerAllocFunction("malloc", 0);
+  registerAllocFunction("__builtin_alloca", 0);
+  registerAllocFunction("alloca", 0);
   registerAllocFunction("calloc", 1);
+  registerAllocFunction("malloc", 0);
   registerAllocFunction("realloc", 1);
 }
 
