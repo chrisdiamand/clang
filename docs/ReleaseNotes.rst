@@ -12,7 +12,7 @@ Written by the `LLVM Team <http://llvm.org/>`_
 
    These are in-progress notes for the upcoming Clang 3.7 release. You may
    prefer the `Clang 3.5 Release Notes
-   <http://llvm.org/releases/3.5/tools/clang/docs/ReleaseNotes.html>`_.
+   <http://llvm.org/releases/3.5.0/tools/clang/docs/ReleaseNotes.html>`_.
 
 Introduction
 ============
@@ -61,6 +61,11 @@ about them. The improvements since the 3.5 release include:
 
 New Compiler Flags
 ------------------
+
+The sized deallocation feature of C++14 is now controlled by the
+``-fsized-deallocation`` flag. This feature relies on library support that
+isn't yet widely deployed, so the user must supply an extra flag to get the
+extra functionality.
 
 The option ....
 

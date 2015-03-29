@@ -1016,7 +1016,7 @@ static void EmitNewInitializer(CodeGenFunction &CGF, const CXXNewExpr *E,
                                llvm::Value *NewPtr,
                                llvm::Value *NumElements,
                                llvm::Value *AllocSizeWithoutCookie) {
-  ApplyDebugLocation DL(CGF, E->getStartLoc());
+  ApplyDebugLocation DL(CGF, E);
   if (E->isArray())
     CGF.EmitNewArrayInitializer(E, ElementType, NewPtr, NumElements,
                                 AllocSizeWithoutCookie);
@@ -1279,10 +1279,9 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(const CXXNewExpr *E) {
 
   // Emit a null check on the allocation result if the allocation
   // function is allowed to return null (because it has a non-throwing
-  // exception spec; for this part, we inline
-  // CXXNewExpr::shouldNullCheckAllocation()) and we have an
+  // exception spec or is the reserved placement new) and we have an
   // interesting initializer.
-  bool nullCheck = allocatorType->isNothrow(getContext()) &&
+  bool nullCheck = E->shouldNullCheckAllocation(getContext()) &&
     (!allocType.isPODType(getContext()) || E->hasInitializer());
 
   llvm::BasicBlock *nullCheckBB = nullptr;

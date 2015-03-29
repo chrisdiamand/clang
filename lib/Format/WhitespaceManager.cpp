@@ -36,7 +36,9 @@ WhitespaceManager::Change::Change(
       PreviousLinePostfix(PreviousLinePostfix),
       CurrentLinePrefix(CurrentLinePrefix), Kind(Kind),
       ContinuesPPDirective(ContinuesPPDirective), IndentLevel(IndentLevel),
-      Spaces(Spaces) {}
+      Spaces(Spaces), IsTrailingComment(false), TokenLength(0),
+      PreviousEndOfTokenColumn(0), EscapedNewlineColumn(0),
+      StartOfBlockComment(nullptr), IndentationOffset(0) {}
 
 void WhitespaceManager::reset() {
   Changes.clear();
@@ -264,6 +266,11 @@ void WhitespaceManager::alignEscapedNewlines(unsigned Start, unsigned End,
 void WhitespaceManager::generateChanges() {
   for (unsigned i = 0, e = Changes.size(); i != e; ++i) {
     const Change &C = Changes[i];
+    if (i > 0) {
+      assert(Changes[i - 1].OriginalWhitespaceRange.getBegin() !=
+                 C.OriginalWhitespaceRange.getBegin() &&
+             "Generating two replacements for the same location");
+    }
     if (C.CreateReplacement) {
       std::string ReplacementText = C.PreviousLinePostfix;
       if (C.ContinuesPPDirective)

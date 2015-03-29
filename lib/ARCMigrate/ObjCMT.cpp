@@ -245,15 +245,14 @@ namespace {
         (Msg->getReceiverKind() != ObjCMessageExpr::Instance &&
          Msg->getReceiverKind() != ObjCMessageExpr::SuperInstance))
       return false;
+    if (const Expr *Receiver = Msg->getInstanceReceiver())
+      if (Receiver->getType()->isObjCBuiltinType())
+        return false;
+      
     const ObjCMethodDecl *Method = Msg->getMethodDecl();
     if (!Method)
       return false;
     if (!Method->isPropertyAccessor())
-      return false;
-    
-    const ObjCInterfaceDecl *IFace =
-      NS.getASTContext().getObjContainingInterface(Method);
-    if (!IFace)
       return false;
     
     const ObjCPropertyDecl *Prop = Method->findPropertyDecl();
@@ -305,6 +304,10 @@ namespace {
       BegLoc = PP.getLocForEndOfToken(BegLoc);
       SourceLocation EndLoc = RHS->getLocStart();
       EndLoc = EndLoc.getLocWithOffset(-1);
+      const char *colon = PP.getSourceManager().getCharacterData(EndLoc);
+      // Add a space after '=' if there is no space between RHS and '='
+      if (colon && colon[0] == ':')
+        PropertyDotString += " ";
       SourceRange Range(BegLoc, EndLoc);
       commit.replace(Range, PropertyDotString);
       // remove '[' ']'
@@ -616,7 +619,7 @@ ClassImplementsAllMethodsAndProperties(ASTContext &Ctx,
       if (Property->getPropertyImplementation() == ObjCPropertyDecl::Optional)
         continue;
       HasAtleastOneRequiredProperty = true;
-      DeclContext::lookup_const_result R = IDecl->lookup(Property->getDeclName());
+      DeclContext::lookup_result R = IDecl->lookup(Property->getDeclName());
       if (R.size() == 0) {
         // Relax the rule and look into class's implementation for a synthesize
         // or dynamic declaration. Class is implementing a property coming from
@@ -647,7 +650,7 @@ ClassImplementsAllMethodsAndProperties(ASTContext &Ctx,
         continue;
       if (MD->getImplementationControl() == ObjCMethodDecl::Optional)
         continue;
-      DeclContext::lookup_const_result R = ImpDecl->lookup(MD->getDeclName());
+      DeclContext::lookup_result R = ImpDecl->lookup(MD->getDeclName());
       if (R.size() == 0)
         return false;
       bool match = false;
@@ -768,19 +771,34 @@ static void rewriteToNSMacroDecl(ASTContext &Ctx,
                                 const TypedefDecl *TypedefDcl,
                                 const NSAPI &NS, edit::Commit &commit,
                                  bool IsNSIntegerType) {
-  QualType EnumUnderlyingT = EnumDcl->getPromotionType();
-  assert(!EnumUnderlyingT.isNull()
+  QualType DesignatedEnumType = EnumDcl->getIntegerType();
+  assert(!DesignatedEnumType.isNull()
          && "rewriteToNSMacroDecl - underlying enum type is null");
   
   PrintingPolicy Policy(Ctx.getPrintingPolicy());
-  std::string TypeString = EnumUnderlyingT.getAsString(Policy);
+  std::string TypeString = DesignatedEnumType.getAsString(Policy);
   std::string ClassString = IsNSIntegerType ? "NS_ENUM(" : "NS_OPTIONS(";
   ClassString += TypeString;
   ClassString += ", ";
   
   ClassString += TypedefDcl->getIdentifier()->getName();
   ClassString += ')';
-  SourceRange R(EnumDcl->getLocStart(), EnumDcl->getLocStart());
+  SourceLocation EndLoc;
+  if (EnumDcl->getIntegerTypeSourceInfo()) {
+    TypeSourceInfo *TSourceInfo = EnumDcl->getIntegerTypeSourceInfo();
+    TypeLoc TLoc = TSourceInfo->getTypeLoc();
+    EndLoc = TLoc.getLocEnd();
+    const char *lbrace = Ctx.getSourceManager().getCharacterData(EndLoc);
+    unsigned count = 0;
+    if (lbrace)
+      while (lbrace[count] != '{')
+        ++count;
+    if (count > 0)
+      EndLoc = EndLoc.getLocWithOffset(count-1);
+  }
+  else
+    EndLoc = EnumDcl->getLocStart();
+  SourceRange R(EnumDcl->getLocStart(), EndLoc);
   commit.replace(R, ClassString);
   // This is to remove spaces between '}' and typedef name.
   SourceLocation StartTypedefLoc = EnumDcl->getLocEnd();
@@ -902,7 +920,7 @@ bool ObjCMigrateASTConsumer::migrateNSEnumDecl(ASTContext &Ctx,
                                            const EnumDecl *EnumDcl,
                                            const TypedefDecl *TypedefDcl) {
   if (!EnumDcl->isCompleteDefinition() || EnumDcl->getIdentifier() ||
-      EnumDcl->isDeprecated() || EnumDcl->getIntegerTypeSourceInfo())
+      EnumDcl->isDeprecated())
     return false;
   if (!TypedefDcl) {
     if (NSIntegerTypedefed) {

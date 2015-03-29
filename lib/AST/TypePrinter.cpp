@@ -110,7 +110,7 @@ namespace {
   };
 }
 
-static void AppendTypeQualList(raw_ostream &OS, unsigned TypeQuals) {
+static void AppendTypeQualList(raw_ostream &OS, unsigned TypeQuals, bool C99) {
   bool appendSpace = false;
   if (TypeQuals & Qualifiers::Const) {
     OS << "const";
@@ -123,7 +123,11 @@ static void AppendTypeQualList(raw_ostream &OS, unsigned TypeQuals) {
   }
   if (TypeQuals & Qualifiers::Restrict) {
     if (appendSpace) OS << ' ';
-    OS << "restrict";
+    if (C99) {
+      OS << "restrict";
+    } else {
+      OS << "__restrict";
+    }
   }
 }
 
@@ -432,7 +436,7 @@ void TypePrinter::printConstantArrayAfter(const ConstantArrayType *T,
                                           raw_ostream &OS) {
   OS << '[';
   if (T->getIndexTypeQualifiers().hasQualifiers()) {
-    AppendTypeQualList(OS, T->getIndexTypeCVRQualifiers());
+    AppendTypeQualList(OS, T->getIndexTypeCVRQualifiers(), Policy.LangOpts.C99);
     OS << ' ';
   }
 
@@ -465,7 +469,7 @@ void TypePrinter::printVariableArrayAfter(const VariableArrayType *T,
                                           raw_ostream &OS) {
   OS << '[';
   if (T->getIndexTypeQualifiers().hasQualifiers()) {
-    AppendTypeQualList(OS, T->getIndexTypeCVRQualifiers());
+    AppendTypeQualList(OS, T->getIndexTypeCVRQualifiers(), Policy.LangOpts.C99);
     OS << ' ';
   }
 
@@ -685,9 +689,6 @@ void TypePrinter::printFunctionProtoAfter(const FunctionProtoType *T,
     case CC_AAPCS_VFP:
       OS << " __attribute__((pcs(\"aapcs-vfp\")))";
       break;
-    case CC_PnaclCall:
-      OS << " __attribute__((pnaclcall))";
-      break;
     case CC_IntelOclBicc:
       OS << " __attribute__((intel_ocl_bicc))";
       break;
@@ -712,7 +713,7 @@ void TypePrinter::printFunctionProtoAfter(const FunctionProtoType *T,
 
   if (unsigned quals = T->getTypeQuals()) {
     OS << ' ';
-    AppendTypeQualList(OS, quals);
+    AppendTypeQualList(OS, quals, Policy.LangOpts.C99);
   }
 
   switch (T->getRefQualifier()) {
@@ -1257,7 +1258,6 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
    OS << ')';
    break;
   }
-  case AttributedType::attr_pnaclcall: OS << "pnaclcall"; break;
   case AttributedType::attr_inteloclbicc: OS << "inteloclbicc"; break;
   }
   OS << "))";
@@ -1477,7 +1477,7 @@ void Qualifiers::print(raw_ostream &OS, const PrintingPolicy& Policy,
 
   unsigned quals = getCVRQualifiers();
   if (quals) {
-    AppendTypeQualList(OS, quals);
+    AppendTypeQualList(OS, quals, Policy.LangOpts.C99);
     addSpace = true;
   }
   if (unsigned addrspace = getAddressSpace()) {

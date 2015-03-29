@@ -54,7 +54,7 @@ void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF,
                    llvm::Value *Src, clang::QualType &DestClangTy);
 
 void visitAllocSite(clang::CodeGen::CodeGenFunction &,
-                    clang::CallExpr *);
+                    const clang::CallExpr *);
 
 std::string getUniqtypeName(const clang::QualType &);
 

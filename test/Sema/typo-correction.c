@@ -13,6 +13,11 @@ void PR21656() {
 a = b ? : 0;  // expected-warning {{type specifier missing, defaults to 'int'}} \
               // expected-error {{use of undeclared identifier 'b'}}
 
+int foobar;  // expected-note {{'foobar' declared here}}
+a = goobar ?: 4;  // expected-warning {{type specifier missing, defaults to 'int'}} \
+                  // expected-error {{use of undeclared identifier 'goobar'; did you mean 'foobar'?}} \
+                  // expected-error {{initializer element is not a compile-time constant}}
+
 struct ContainerStuct {
   enum { SOME_ENUM }; // expected-note {{'SOME_ENUM' declared here}}
 };
@@ -22,4 +27,10 @@ void func(int arg) {
   case SOME_ENUM_: // expected-error {{use of undeclared identifier 'SOME_ENUM_'; did you mean 'SOME_ENUM'}}
     ;
   }
+}
+
+void banana(void);  // expected-note {{'banana' declared here}}
+int c11Generic(int arg) {
+  _Generic(hello, int : banana)();  // expected-error-re {{use of undeclared identifier 'hello'{{$}}}}
+  _Generic(arg, int : bandana)();  // expected-error {{use of undeclared identifier 'bandana'; did you mean 'banana'?}}
 }

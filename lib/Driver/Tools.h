@@ -109,7 +109,8 @@ using llvm::opt::ArgStringList;
     ClangAs(const ToolChain &TC) : Tool("clang::as",
                                         "clang integrated assembler", TC,
                                         RF_Full) {}
-
+    void AddMIPSTargetArgs(const llvm::opt::ArgList &Args,
+                           llvm::opt::ArgStringList &CmdArgs) const;
     bool hasGoodDiagnostics() const override { return true; }
     bool hasIntegratedAssembler() const override { return false; }
     bool hasIntegratedCPP() const override { return false; }
@@ -228,6 +229,8 @@ namespace arm {
   const char* getARMCPUForMArch(const llvm::opt::ArgList &Args,
                                 const llvm::Triple &Triple);
   const char* getLLVMArchSuffixForARM(StringRef CPU);
+
+  void appendEBLinkFlags(const llvm::opt::ArgList &Args, ArgStringList &CmdArgs, const llvm::Triple &Triple);
 }
 
 namespace mips {
@@ -244,6 +247,22 @@ namespace mips {
 namespace ppc {
   bool hasPPCAbiArg(const llvm::opt::ArgList &Args, const char *Value);
 }
+
+  /// cloudabi -- Directly call GNU Binutils linker
+namespace cloudabi {
+class LLVM_LIBRARY_VISIBILITY Link : public GnuTool {
+public:
+  Link(const ToolChain &TC) : GnuTool("cloudabi::Link", "linker", TC) {}
+
+  bool hasIntegratedCPP() const override { return false; }
+  bool isLinkJob() const override { return true; }
+
+  void ConstructJob(Compilation &C, const JobAction &JA,
+                    const InputInfo &Output, const InputInfoList &Inputs,
+                    const llvm::opt::ArgList &TCArgs,
+                    const char *LinkingOutput) const override;
+};
+} // end namespace cloudabi
 
 namespace darwin {
   llvm::Triple::ArchType getArchTypeForMachOArchName(StringRef Str);

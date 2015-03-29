@@ -142,7 +142,7 @@ AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
 
   unsigned NumArgs = Site->getNumArgs();
   assert(AF->SizeArgIndex < NumArgs);
-  clang::Expr *Arg = static_cast<clang::Expr *>(Site->getArg(AF->SizeArgIndex));
+  clang::Expr *Arg = Site->getArg(AF->SizeArgIndex);
 
   AllocSizeVisitor *Visitor = new AllocSizeVisitor();
   Visitor->TraverseStmt(Arg);
@@ -197,14 +197,14 @@ AllocSite::~AllocSite() {
 }
 
 void visitAllocSite(clang::CodeGen::CodeGenFunction &CGF,
-                    clang::CallExpr *Site)
+                    const clang::CallExpr *Site)
 {
   if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch) &&
       !CGF.SanOpts.has(clang::SanitizerKind::Allocs)) {
     return;
   }
 
-  AllocSite *AS = new AllocSite(CGF, Site);
+  AllocSite *AS = new AllocSite(CGF, const_cast<clang::CallExpr *>(Site));
   AS->emitIfValid();
   delete AS;
 }

@@ -139,9 +139,32 @@ void CodeGenFunction::EmitCXXGlobalVarDeclInit(const VarDecl &D,
   const Expr *Init = D.getInit();
   QualType T = D.getType();
 
+  // The address space of a static local variable (DeclPtr) may be different
+  // from the address space of the "this" argument of the constructor. In that
+  // case, we need an addrspacecast before calling the constructor.
+  //
+  // struct StructWithCtor {
+  //   __device__ StructWithCtor() {...}
+  // };
+  // __device__ void foo() {
+  //   __shared__ StructWithCtor s;
+  //   ...
+  // }
+  //
+  // For example, in the above CUDA code, the static local variable s has a
+  // "shared" address space qualifier, but the constructor of StructWithCtor
+  // expects "this" in the "generic" address space.
+  unsigned ExpectedAddrSpace = getContext().getTargetAddressSpace(T);
+  unsigned ActualAddrSpace = DeclPtr->getType()->getPointerAddressSpace();
+  if (ActualAddrSpace != ExpectedAddrSpace) {
+    llvm::Type *LTy = CGM.getTypes().ConvertTypeForMem(T);
+    llvm::PointerType *PTy = llvm::PointerType::get(LTy, ExpectedAddrSpace);
+    DeclPtr = llvm::ConstantExpr::getAddrSpaceCast(DeclPtr, PTy);
+  }
+
   if (!T->isReferenceType()) {
     if (getLangOpts().OpenMP && D.hasAttr<OMPThreadPrivateDeclAttr>())
-      (void)CGM.getOpenMPRuntime().EmitOMPThreadPrivateVarDefinition(
+      (void)CGM.getOpenMPRuntime().emitThreadPrivateVarDefinition(
           &D, DeclPtr, D.getAttr<OMPThreadPrivateDeclAttr>()->getLocation(),
           PerformInit, this);
     if (PerformInit)
@@ -469,11 +492,11 @@ CodeGenFunction::GenerateCXXGlobalInitFunc(llvm::Function *Fn,
                                            ArrayRef<llvm::Function *> Decls,
                                            llvm::GlobalVariable *Guard) {
   {
-    ApplyDebugLocation NL(*this);
+    auto NL = ApplyDebugLocation::CreateEmpty(*this);
     StartFunction(GlobalDecl(), getContext().VoidTy, Fn,
                   getTypes().arrangeNullaryFunction(), FunctionArgList());
     // Emit an artificial location for this function.
-    ArtificialLocation AL(*this);
+    auto AL = ApplyDebugLocation::CreateArtificial(*this);
 
     llvm::BasicBlock *ExitBlock = nullptr;
     if (Guard) {
@@ -520,11 +543,11 @@ void CodeGenFunction::GenerateCXXGlobalDtorsFunc(llvm::Function *Fn,
                   const std::vector<std::pair<llvm::WeakVH, llvm::Constant*> >
                                                 &DtorsAndObjects) {
   {
-    ApplyDebugLocation NL(*this);
+    auto NL = ApplyDebugLocation::CreateEmpty(*this);
     StartFunction(GlobalDecl(), getContext().VoidTy, Fn,
                   getTypes().arrangeNullaryFunction(), FunctionArgList());
     // Emit an artificial location for this function.
-    ArtificialLocation AL(*this);
+    auto AL = ApplyDebugLocation::CreateArtificial(*this);
 
     // Emit the dtors, in reverse order from construction.
     for (unsigned i = 0, e = DtorsAndObjects.size(); i != e; ++i) {
