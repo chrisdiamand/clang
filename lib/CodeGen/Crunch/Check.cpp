@@ -242,9 +242,22 @@ void Check::emitAssertFail() {
   Builder.CreateCall(AssertFun, Args);
 }
 
+void Check::emitIncrementCheckCount() {
+  const StringRef CCName = "__libcrunch_begun";
+  llvm::Type *CCType = llvm::Type::getInt32Ty(VMContext);
+  llvm::Constant *CheckCount = getModule().getOrInsertGlobal(CCName, CCType);
+  llvm::Constant *One = llvm::ConstantInt::get(CCType, 1);
+
+  llvm::LoadInst *CCLoaded = Builder.CreateLoad(CheckCount);
+  llvm::Value *CCAddOne = Builder.CreateAdd(CCLoaded, One, "CheckCount");
+  Builder.CreateStore(CCAddOne, CheckCount);
+}
+
 void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch) || CheckFunKind == CT_NoCheck)
     return;
+
+  emitIncrementCheckCount();
 
   // Cast the pointer to int8_t * to match __is_aU().
   Src = Builder.CreateBitCast(Src, llvm::Type::getInt8PtrTy(VMContext));
