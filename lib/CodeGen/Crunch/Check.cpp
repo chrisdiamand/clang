@@ -185,32 +185,58 @@ llvm::Constant *Check::getCheckFunction(llvm::Type *SecondArg) {
   return Ret;
 }
 
+/* Emit the functionality of the '__inline_assert' macro, i.e.:
+ * if (!Pred) { __assert_fail(...); } */
 void Check::emitAssert(llvm::Value *Pred) {
+  llvm::BasicBlock *StartBB, *BodyBB, *ExitBB;
+  StartBB = Builder.GetInsertBlock();
+
+  // Negate the condition by comparing to zero.
+  Pred = Builder.CreateICmpEQ(Pred,
+                              llvm::ConstantInt::get(Pred->getType(), 0),
+                              "crunchAssert.cond");
+
+  BodyBB = CGF.createBasicBlock("crunchAssert.body", CGF.CurFn);
+  ExitBB = CGF.createBasicBlock("crunchAssert.exit");
+
+  Builder.CreateCondBr(Pred, BodyBB, ExitBB);
+
+  // Generate the 'if' body
+  Builder.SetInsertPoint(BodyBB);
+  emitAssertFail();
+  Builder.CreateBr(ExitBB);
+
+  CGF.CurFn->getBasicBlockList().push_back(ExitBB);
+  Builder.SetInsertPoint(ExitBB);
+}
+
+/* Emit the 'false' case of the '__inline_assert' macro, i.e.:
+ * __assert_fail(...); */
+void Check::emitAssertFail() {
   std::string Message = getCheckFunctionName(CheckFunKind)
                       + "(?, " + CrunchTypeName + ")";
 
-  llvm::Value *Args[5];
-  Args[0] = Pred;
-  Args[1] = llvm::ConstantDataArray::getString(VMContext, Message);
+  llvm::Value *Args[4];
+  Args[0] = llvm::ConstantDataArray::getString(VMContext, Message);
   // FIXME: Actually find out the file/line number/function.
   clang::SourceLocation Loc = ClangSrc->getExprLoc();
   clang::SourceManager &SM = CGF.getContext().getSourceManager();
-  Args[2] = llvm::ConstantDataArray::getString(VMContext,
+  Args[1] = llvm::ConstantDataArray::getString(VMContext,
                                                SM.getBufferName(Loc));
-  Args[3] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext),
+  Args[2] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext),
                                    SM.getPresumedLineNumber(Loc));
-  Args[4] = llvm::ConstantDataArray::getString(VMContext, "some_function");
+  Args[3] = llvm::ConstantDataArray::getString(VMContext, "some_function");
 
-  llvm::Type *ArgTy[5];
+  llvm::Type *ArgTy[4];
   for (unsigned int i = 0; i < 5; ++i) {
     ArgTy[i] = Args[i]->getType();
   }
   llvm::Type *ResTy = llvm::Type::getVoidTy(VMContext);
 
-  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(ArgTy), 5);
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(ArgTy), 4);
   llvm::FunctionType *FunTy = llvm::FunctionType::get(ResTy, ArgTy_ar, false);
 
-  llvm::Constant *AssertFun = getModule().getOrInsertFunction("__inline_assert",
+  llvm::Constant *AssertFun = getModule().getOrInsertFunction("__assert_fail",
                                                               FunTy);
   Builder.CreateCall(AssertFun, Args);
 }
