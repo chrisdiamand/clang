@@ -218,14 +218,15 @@ void Check::emitAssertFail() {
 
   llvm::Value *Args[4];
   Args[0] = llvm::ConstantDataArray::getString(VMContext, Message);
-  // FIXME: Actually find out the file/line number/function.
+
   clang::SourceLocation Loc = ClangSrc->getExprLoc();
   clang::SourceManager &SM = CGF.getContext().getSourceManager();
   Args[1] = llvm::ConstantDataArray::getString(VMContext,
                                                SM.getBufferName(Loc));
   Args[2] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext),
                                    SM.getPresumedLineNumber(Loc));
-  Args[3] = llvm::ConstantDataArray::getString(VMContext, "some_function");
+  Args[3] = llvm::ConstantDataArray::getString(VMContext,
+                                               CGF.CurFn->getName());
 
   llvm::Type *ArgTy[4];
   for (unsigned int i = 0; i < 5; ++i) {
