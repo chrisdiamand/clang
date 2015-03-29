@@ -37,6 +37,7 @@ private:
 
   llvm::Value *getUniqtypeVariable();
   llvm::Constant *getCheckFunction(llvm::Type *);
+  void emitAssertFail();
   void emitAssert(llvm::Value *);
 
 public:
