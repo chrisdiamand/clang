@@ -44,13 +44,6 @@ public:
   }
 
   virtual bool VisitOffsetOfExpr(clang::OffsetOfExpr *E) {
-    E->dump();
-    printf("OffsetOfExpr: nexpr = %u, ncomp = %u\n",
-           E->getNumExpressions(), E->getNumComponents());
-    for (unsigned i = 0; i < E->getNumComponents(); ++i) {
-//      const clang::OffsetOfNode &Comp = E->getComponent(i);
- //     Comp->dump();
-    }
     QType = E->getTypeSourceInfo()->getType();
     Found = true;
     return false;
