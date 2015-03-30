@@ -51,8 +51,15 @@ static std::string parseType_actual(const clang::QualType &Ty,
 
   } else if (Ty->isRecordType()) {
     auto RTy = Ty->getAsStructureType();
-    Ret = RTy->getDecl()->getName().str();
-    CheckFunKind = CT_Named;
+    auto Decl = RTy->getDecl();
+    Ret = Decl->getName().str();
+    /* Crunchcc generates a __named_a check when there is no definition, or a
+     * __is_a check otherwise. */
+    if (Decl->getDefinition() == nullptr) {
+      CheckFunKind = CT_Named;
+    } else {
+      CheckFunKind = CT_IsA;
+    }
 
   } else if (Ty->isPointerType()) {
     clang::QualType PtrTy = Ty->getPointeeType();
