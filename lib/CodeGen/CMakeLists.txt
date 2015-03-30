@@ -71,7 +71,8 @@ add_clang_library(clangCodeGen
   MicrosoftCXXABI.cpp
   ModuleBuilder.cpp
   Crunch/Check.cpp
-  Crunch/Sites.cpp
+  Crunch/Crunch.cpp
+  Crunch/AllocSite.cpp
   SanitizerMetadata.cpp
   TargetInfo.cpp
 
