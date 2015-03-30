@@ -8,8 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "Crunch/AllocSite.h"
 #include "Crunch/Crunch.h"
-#include "Crunch/Sites.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 
@@ -194,19 +194,6 @@ void AllocSite::emitIfValid(void) {
 
 AllocSite::~AllocSite() {
   free(SourceRealPath);
-}
-
-void visitAllocSite(clang::CodeGen::CodeGenFunction &CGF,
-                    clang::CallExpr *Site)
-{
-  if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch) &&
-      !CGF.SanOpts.has(clang::SanitizerKind::Allocs)) {
-    return;
-  }
-
-  AllocSite *AS = new AllocSite(CGF, Site);
-  AS->emitIfValid();
-  delete AS;
 }
 
 } // namespace Crunch
