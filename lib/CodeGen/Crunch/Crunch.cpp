@@ -135,9 +135,8 @@ void visitAllocSite(clang::CodeGen::CodeGenFunction &CGF,
     return;
   }
 
-  AllocSite *AS = new AllocSite(CGF, const_cast<clang::CallExpr *>(Site));
-  AS->emitIfValid();
-  delete AS;
+  AllocSite AS(CGF, const_cast<clang::CallExpr *>(Site));
+  AS.emitIfValid();
 }
 
 } // namespace Crunch

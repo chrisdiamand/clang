@@ -19,6 +19,7 @@ using clang::UnaryExprOrTypeTraitExpr;
 using clang::RecursiveASTVisitor;
 using std::ios;
 
+// Visit sizeof expressions looking for their type.
 class AllocSizeVisitor : public RecursiveASTVisitor<AllocSizeVisitor> {
 private:
   clang::QualType   QType;
@@ -111,25 +112,57 @@ static clang::Type *getVoidType() {
   return VoidType;
 }
 
+/* Recurse through CallExpr->getCallee() looking for the actual DeclRefExpr to
+ * the callee. */
+class DeclRefVisitor : public RecursiveASTVisitor<DeclRefVisitor> {
+private:
+  clang::DeclRefExpr *Ret = nullptr;
+
+public:
+  explicit DeclRefVisitor() {};
+  virtual ~DeclRefVisitor() {};
+
+  virtual bool VisitDeclRefExpr(clang::DeclRefExpr *E) {
+    Ret = E;
+    return false;
+  }
+
+  clang::DeclRefExpr *get() {
+    return Ret;
+  }
+};
+
+static clang::DeclRefExpr *findDeclRef(clang::Expr *E) {
+  DeclRefVisitor Visitor;
+  Visitor.TraverseStmt(E);
+  auto Ret = Visitor.get();
+
+  if (Ret == nullptr) {
+    E->dump();
+  }
+  return Ret;
+}
+
 AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
                      clang::CallExpr *_Site) :
                       CGF(_CGF), Site(_Site)
 {
+  valid = false;
   if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch) &&
       !CGF.SanOpts.has(clang::SanitizerKind::Allocs)) {
-    valid = false;
     return;
   }
 
-  auto Callee = Site->getCallee()->IgnoreImplicit()->IgnoreParens();
-  auto CalleeDR = clang::dyn_cast<clang::DeclRefExpr>(Callee);
-  FunName = CalleeDR->getFoundDecl()->getName().str();
+  auto Callee = findDeclRef(Site->getCallee());
+  assert(Callee != nullptr && "No DeclRefExpr in CallExpr");
+
+  auto Decl = Callee->getFoundDecl();
+  FunName = Decl->getName().str();
 
   getSourceLoc();
 
   AllocFunction *AF = getAllocFunction(FunName);
   if (AF == nullptr) {
-    valid = false;
     return;
   }
 
@@ -137,10 +170,10 @@ AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
   assert(AF->SizeArgIndex < NumArgs);
   clang::Expr *Arg = static_cast<clang::Expr *>(Site->getArg(AF->SizeArgIndex));
 
-  AllocSizeVisitor *Visitor = new AllocSizeVisitor();
-  Visitor->TraverseStmt(Arg);
+  AllocSizeVisitor Visitor;
+  Visitor.TraverseStmt(Arg);
 
-  if (!Visitor->typeFound()) {
+  if (!Visitor.typeFound()) {
     const clang::ASTContext &Context = CGF.getContext();
     clang::DiagnosticsEngine &diagEngine = Context.getDiagnostics();
     unsigned diagID = diagEngine.getCustomDiagID(
@@ -154,9 +187,8 @@ AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
     valid = true;
   } else {
     valid = true;
-    Type = Visitor->getType();
+    Type = Visitor.getType();
   }
-  delete Visitor;
 }
 
 std::string AllocSite::getOutputFName() {
