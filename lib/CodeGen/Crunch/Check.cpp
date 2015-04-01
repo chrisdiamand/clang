@@ -65,7 +65,7 @@ Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
 static std::string getCheckFunctionName(CheckFunctionKind Kind) {
   switch (Kind) {
     case CT_NoCheck:            return "__no_check";
-    case CT_IsA:                return "__is_a_internal";
+    case CT_IsA:                return "__is_aU_not_inlined";
     case CT_Named:              return "__named_a_internal";
     case CT_PointerOfDegree:    return "__is_a_pointer_of_degree_internal";
     case CT_FunctionRefining:   return "__is_a_function_refining_internal";
@@ -164,8 +164,6 @@ void Check::emitIncrementCheckCount() {
 void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch) || CheckFunKind == CT_NoCheck)
     return;
-
-  emitIncrementCheckCount();
 
   // Cast the pointer to int8_t * to match __is_aU().
   Src = Builder.CreateBitCast(Src, llvm::Type::getInt8PtrTy(VMContext));
