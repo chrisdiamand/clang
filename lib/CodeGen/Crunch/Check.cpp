@@ -165,6 +165,12 @@ void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch) || CheckFunKind == CT_NoCheck)
     return;
 
+  /* The IsA check calls a function which already increments the counter for
+   * us. The other calls just skip straight to calling %_internal. */
+  if (CheckFunKind != CT_IsA) {
+    emitIncrementCheckCount();
+  }
+
   // Cast the pointer to int8_t * to match __is_aU().
   Src = Builder.CreateBitCast(Src, llvm::Type::getInt8PtrTy(VMContext));
 
