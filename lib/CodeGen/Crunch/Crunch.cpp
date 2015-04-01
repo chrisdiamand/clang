@@ -19,10 +19,45 @@ using namespace CodeGen;
 
 namespace Crunch {
 
+using clang::BuiltinType;
+
+static std::string getBuiltinTypeName(const BuiltinType *Ty) {
+  switch (Ty->getKind()) {
+    case BuiltinType::Void:       return "void";
+    case BuiltinType::Bool:       return "bool";
+    case BuiltinType::Char_S:     return "char";
+    case BuiltinType::Char_U:     return "unsigned_char";
+    case BuiltinType::SChar:      return "char";
+    case BuiltinType::UChar:      return "unsigned_char";
+    case BuiltinType::WChar_S:    return "wchar_t";
+    case BuiltinType::WChar_U:    return "unsigned_wchar_t";
+    case BuiltinType::Char16:     return "char16_t";
+    case BuiltinType::Char32:     return "char32_t";
+    case BuiltinType::UShort:     return "unsigned_short_int";
+    case BuiltinType::Short:      return "short_int";
+    case BuiltinType::UInt:       return "unsigned_int";
+    case BuiltinType::Int:        return "int";
+    case BuiltinType::ULong:      return "unsigned_long_int";
+    case BuiltinType::Long:       return "long_int";
+    case BuiltinType::ULongLong:  return "unsigned_long_long_int";
+    case BuiltinType::LongLong:   return "long_long_int";
+    case BuiltinType::Int128:     return "int128_t";
+    case BuiltinType::UInt128:    return "uint128_t";
+    case BuiltinType::Half:       return "__fp16";
+    case BuiltinType::Float:      return "float";
+    case BuiltinType::Double:     return "double";
+    case BuiltinType::LongDouble: return "long_double";
+    case BuiltinType::NullPtr:    return "__PTR_void";
+    default:                      break;
+  }
+
+  return "UNKNOWN";
+}
+
 /* Recurse down the type structure, returning the string used by libcrunch to
  * represent that type, and finding out which libcrunch function needs to be
  * called to check it. */
-static std::string parseType_actual(const clang::QualType &Ty,
+static std::string parseType_actual(const clang::QualType &NonCanonicalTy,
                                     CheckFunctionKind *CheckFunResult,
                                     int *PointerDegree)
 {
@@ -31,7 +66,9 @@ static std::string parseType_actual(const clang::QualType &Ty,
   CheckFunctionKind CheckFunKind = CT_IsA;
   std::string Ret = "__UNKNOWN_TYPE__";
 
-  // Based on TypePrinting::print()
+  // Remove typedefs.
+  auto Ty = NonCanonicalTy.getCanonicalType();
+
   if (Ty->isBuiltinType()) {
     auto BTy = clang::cast<clang::BuiltinType>(Ty);
     if (BTy->isVoidType()) {
@@ -39,15 +76,7 @@ static std::string parseType_actual(const clang::QualType &Ty,
     } else {
       CheckFunKind = CT_IsA;
     }
-    Ret = BTy->getName(printPol).str();
-
-    /* HACK: Libcrunch doesn't abbreviate 'short int' to 'short' (and so on),
-     * so we need to add it in. */
-    if (BTy->isIntegerType()) {
-      if (Ret != "int") {
-        Ret = Ret + "_int";
-      }
-    }
+    Ret = getBuiltinTypeName(BTy);
 
   } else if (Ty->isRecordType()) {
     auto RTy = Ty->getAsStructureType();
