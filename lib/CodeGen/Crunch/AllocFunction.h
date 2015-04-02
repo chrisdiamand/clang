@@ -17,8 +17,8 @@ private:
 
   static std::map<std::string, AllocFunction *> Functions;
   static void add(const std::string &);
-  static void addDefaults();
-  static void ensureInitialized();
+  static void addFromEnvironment(const std::string &);
+  static void addFunctions();
 
 public:
   unsigned int getSizeArg();
