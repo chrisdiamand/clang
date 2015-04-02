@@ -2,6 +2,8 @@
 #include <iostream>
 #include <regex>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <string>
 
 #include "Crunch/AllocFunction.h"
@@ -50,22 +52,41 @@ void AllocFunction::add(const std::string &Descr) {
   }
 }
 
-void AllocFunction::addDefaults(void) {
+void AllocFunction::addFromEnvironment(const std::string &EnvVar) {
+  char *EnvValue = getenv(EnvVar.c_str());
+  char *saveptr;
+  if (EnvValue == nullptr) {
+    return;
+  }
+
+  // Split into whitespace-separated tokens
+  char *Token = strtok_r(EnvValue, " \t,", &saveptr);
+  while (Token != NULL) {
+    std::string Descr(Token);
+    std::cout << "!!!!!" << Descr << "\n";
+    add(Descr);
+    Token = strtok_r(NULL, " \t,", &saveptr);
+  }
+}
+
+void AllocFunction::addFunctions() {
+  if (Functions.size() > 0) {
+    return;
+  }
+
   add("alloca(Z)p");
   add("malloc(Z)p");
   add("calloc(zZ)p");
   add("realloc(pZ)p");
   add("memalign(zZ)p");
-}
 
-void AllocFunction::ensureInitialized() {
-  if (Functions.size() == 0) {
-    addDefaults();
-  }
+  addFromEnvironment("LIBALLOCS_ALLOC_FNS");
+  addFromEnvironment("LIBALLOCS_SUBALLOC_FNS");
+  addFromEnvironment("LIBALLOCS_ALLOCSZ_FNS");
 }
 
 AllocFunction *AllocFunction::get(const std::string &Name) {
-  ensureInitialized();
+  addFunctions();
 
   auto it = Functions.find(Name);
 
