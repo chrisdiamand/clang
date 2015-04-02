@@ -8,19 +8,21 @@ namespace Crunch {
 
 class AllocFunction {
 private:
-  unsigned int SizeArgIndex;
+  unsigned int SizeArgIndex = 0;
+  std::string Name = "", Args = "", Return = "";
+  bool valid = false;
 
-  AllocFunction(int _SizeArgIndex) :
-    SizeArgIndex(_SizeArgIndex) {};
+  void parseDescr(const std::string &);
+  AllocFunction(const std::string &);
 
   static std::map<std::string, AllocFunction *> Functions;
-  static void add(std::string, int);
+  static void add(const std::string &);
   static void addDefaults();
   static void ensureInitialized();
 
 public:
   unsigned int getSizeArg();
-  static AllocFunction *get(std::string);
+  static AllocFunction *get(const std::string &);
 };
 
 } // namespace Crunch
