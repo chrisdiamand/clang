@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "Crunch/AllocFunction.h"
 #include "Crunch/AllocSite.h"
 #include "Crunch/Crunch.h"
 #include "clang/AST/ASTContext.h"
@@ -58,41 +59,6 @@ public:
     return QType;
   }
 };
-
-struct AllocFunction {
-  unsigned SizeArgIndex;
-
-  AllocFunction(int _SizeArgIndex) :
-    SizeArgIndex(_SizeArgIndex) {};
-};
-
-static std::map<std::string, AllocFunction *> AllocFunctions;
-
-static void registerAllocFunction(std::string Name, int SizeArgIndex) {
-  AllocFunction *AF = new AllocFunction(SizeArgIndex);
-  AllocFunctions[Name] = AF;
-}
-
-static void registerAllocFunctions(void) {
-  if (AllocFunctions.size() != 0) {
-    return;
-  }
-  registerAllocFunction("__builtin_alloca", 0);
-  registerAllocFunction("alloca", 0);
-  registerAllocFunction("calloc", 1);
-  registerAllocFunction("malloc", 0);
-  registerAllocFunction("realloc", 1);
-}
-
-static AllocFunction *getAllocFunction(std::string Name) {
-  registerAllocFunctions();
-  auto it = AllocFunctions.find(Name);
-
-  if (it == AllocFunctions.end()) {
-    return nullptr;
-  }
-  return it->second;
-}
 
 void AllocSite::getSourceLoc() {
   clang::SourceLocation Loc = Site->getExprLoc();
@@ -161,14 +127,14 @@ AllocSite::AllocSite(clang::CodeGen::CodeGenFunction &_CGF,
 
   getSourceLoc();
 
-  AllocFunction *AF = getAllocFunction(FunName);
+  AllocFunction *AF = AllocFunction::get(FunName);
   if (AF == nullptr) {
     return;
   }
 
   unsigned NumArgs = Site->getNumArgs();
-  assert(AF->SizeArgIndex < NumArgs);
-  clang::Expr *Arg = static_cast<clang::Expr *>(Site->getArg(AF->SizeArgIndex));
+  assert(AF->getSizeArg() < NumArgs);
+  clang::Expr *Arg = Site->getArg(AF->getSizeArg());
 
   AllocSizeVisitor Visitor;
   Visitor.TraverseStmt(Arg);
