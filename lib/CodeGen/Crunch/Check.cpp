@@ -45,11 +45,9 @@ llvm::Value *Check::getUniqtypeVariable() {
   return nullptr;
 }
 
-Check::Check(clang::CodeGen::CodeGenFunction &_CGF,
-             clang::CodeGen::CGBuilderTy &_Builder,
-             llvm::LLVMContext &_VMContext, clang::Expr *_ClangSrc,
+Check::Check(clang::CodeGen::CodeGenFunction &_CGF, clang::Expr *_ClangSrc,
              llvm::Value *_Src, clang::QualType &_DestClangTy) :
-  CGF(_CGF), Builder(_Builder), VMContext(_VMContext),
+  CGF(_CGF), Builder(_CGF.Builder), VMContext(_CGF.getLLVMContext()),
   ClangSrc(_ClangSrc), Src(_Src), DestClangTy(_DestClangTy)
 {
   assert(DestClangTy->isPointerType() && "Can't check non-pointer destination types");

@@ -148,11 +148,10 @@ std::string getUniqtypeName(const clang::QualType &Ty) {
   return "__uniqtype__" + parseType_actual(Ty, nullptr, nullptr);
 }
 
-void emitCastCheck(CodeGenFunction &CGF, CGBuilderTy &Builder,
-                   llvm::LLVMContext &VMContext, clang::Expr *ClangSrc,
+void emitCastCheck(CodeGenFunction &CGF, clang::Expr *ClangSrc,
                    llvm::Value *Src, clang::QualType &DestClangTy)
 {
-  Check c(CGF, Builder, VMContext, ClangSrc, Src, DestClangTy);
+  Check c(CGF, ClangSrc, Src, DestClangTy);
   c.emit();
 }
 
