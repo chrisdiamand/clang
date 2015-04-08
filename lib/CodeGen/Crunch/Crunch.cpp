@@ -167,4 +167,42 @@ void visitAllocSite(clang::CodeGen::CodeGenFunction &CGF,
   AS.emitIfValid();
 }
 
+llvm::Constant *getSizeofFunction(clang::CodeGen::CodeGenFunction &CGF,
+                                  llvm::Value **Args)
+{
+  llvm::Type *ArgTy[2];
+  llvm::Module &TheModule = CGF.CGM.getModule();
+  const std::string FunName = "__crunch_sizeof__";
+  ArgTy[0] = Args[0]->getType();
+  // This function will return its second argument, so the types need to match.
+  ArgTy[1] = Args[1]->getType();
+  llvm::Type *RetTy = ArgTy[1];
+
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(ArgTy), 2);
+  llvm::FunctionType *FunTy = llvm::FunctionType::get(RetTy, ArgTy_ar, false);
+
+  return TheModule.getOrInsertFunction(FunName, FunTy);
+}
+
+/* We need to preserve sizeof expressions (instead of just returning a number)
+ * so that their type ends up in the LLVM IR. */
+llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
+                            const clang::UnaryExprOrTypeTraitExpr *E,
+                            llvm::Value *ActualValue)
+{
+  auto Kind = E->getKind();
+  if (Kind != clang::UETT_SizeOf) {
+    return ActualValue;
+  }
+  auto ArgType = E->getArgumentType();
+  std::string TypeDesc = parseType_actual(ArgType, nullptr, nullptr);
+
+  llvm::Value *Args[2];
+  Args[0] = llvm::ConstantDataArray::getString(CGF.getLLVMContext(), TypeDesc);
+  Args[1] = ActualValue;
+  llvm::Constant *Fun = getSizeofFunction(CGF, Args);
+
+  return CGF.Builder.CreateCall(Fun, Args);
+}
+
 } // namespace Crunch

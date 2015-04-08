@@ -2021,6 +2021,7 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
 Value *
 ScalarExprEmitter::VisitUnaryExprOrTypeTraitExpr(
                               const UnaryExprOrTypeTraitExpr *E) {
+  llvm::Value *Ret = nullptr;
   QualType TypeToSize = E->getTypeOfArgument();
   if (E->getKind() == UETT_SizeOf) {
     if (const VariableArrayType *VAT =
@@ -2045,13 +2046,21 @@ ScalarExprEmitter::VisitUnaryExprOrTypeTraitExpr(
       if (!eltSize.isOne())
         size = CGF.Builder.CreateNUWMul(CGF.CGM.getSize(eltSize), numElts);
 
-      return size;
+      Ret = size;
     }
   }
 
   // If this isn't sizeof(vla), the result must be constant; use the constant
   // folding logic so we don't have to duplicate it here.
-  return Builder.getInt(E->EvaluateKnownConstInt(CGF.getContext()));
+  if (Ret == nullptr) {
+    Ret = Builder.getInt(E->EvaluateKnownConstInt(CGF.getContext()));
+  }
+
+  if (CGF.SanOpts.has(clang::SanitizerKind::Crunch)) {
+    Ret = Crunch::markSizeofExpr(CGF, E, Ret);
+  }
+
+  return Ret;
 }
 
 Value *ScalarExprEmitter::VisitUnaryReal(const UnaryOperator *E) {
