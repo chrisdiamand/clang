@@ -44,9 +44,7 @@ private:
   void emitAssert(llvm::Value *);
 
 public:
-  Check(clang::CodeGen::CodeGenFunction &_CGF,
-        clang::CodeGen::CGBuilderTy &_Builder,
-        llvm::LLVMContext &_VMContext, clang::Expr *_ClangSrc,
+  Check(clang::CodeGen::CodeGenFunction &_CGF, clang::Expr *_ClangSrc,
         llvm::Value *_Src, clang::QualType &_DestClangTy);
   void emit();
 };
