@@ -15,6 +15,10 @@ void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF, clang::Expr *ClangSrc,
 void visitAllocSite(clang::CodeGen::CodeGenFunction &,
                     const clang::CallExpr *);
 
+llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
+                            const clang::UnaryExprOrTypeTraitExpr *E,
+                            llvm::Value *actualValue);
+
 std::string parseType(const clang::QualType &,
                       CheckFunctionKind *, int *);
 std::string getUniqtypeName(const clang::QualType &);
