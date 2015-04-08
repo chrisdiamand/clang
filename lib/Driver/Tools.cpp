@@ -750,9 +750,8 @@ static void getARMTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     Features.push_back("-crypto");
   }
 
-  // En/disable crc
-  if (Arg *A = Args.getLastArg(options::OPT_mcrc,
-                               options::OPT_mnocrc)) {
+  // En/disable crc code generation.
+  if (Arg *A = Args.getLastArg(options::OPT_mcrc, options::OPT_mnocrc)) {
     if (A->getOption().matches(options::OPT_mcrc))
       Features.push_back("+crc");
     else
@@ -2307,18 +2306,10 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
     StaticRuntimes.push_back("msan");
   if (SanArgs.needsTsanRt())
     StaticRuntimes.push_back("tsan");
-  // WARNING: UBSan should always go last.
   if (SanArgs.needsUbsanRt()) {
-    // Check if UBSan is combined with another sanitizers.
-    if (StaticRuntimes.empty()) {
-      StaticRuntimes.push_back("ubsan_standalone");
-      if (SanArgs.linkCXXRuntimes())
-        StaticRuntimes.push_back("ubsan_standalone_cxx");
-    } else {
-      StaticRuntimes.push_back("ubsan");
-      if (SanArgs.linkCXXRuntimes())
-        StaticRuntimes.push_back("ubsan_cxx");
-    }
+    StaticRuntimes.push_back("ubsan_standalone");
+    if (SanArgs.linkCXXRuntimes())
+      StaticRuntimes.push_back("ubsan_standalone_cxx");
   }
 }
 
@@ -3117,8 +3108,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       Args.hasArg(options::OPT_dA))
     CmdArgs.push_back("-masm-verbose");
 
-  if (!Args.hasFlag(options::OPT_fintegrated_as, options::OPT_fno_integrated_as,
-                    IsIntegratedAssemblerDefault))
+  bool UsingIntegratedAssembler =
+      Args.hasFlag(options::OPT_fintegrated_as, options::OPT_fno_integrated_as,
+                   IsIntegratedAssemblerDefault);
+  if (!UsingIntegratedAssembler)
     CmdArgs.push_back("-no-integrated-as");
 
   if (Args.hasArg(options::OPT_fdebug_pass_structure)) {
@@ -3362,7 +3355,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (!Args.hasFlag(options::OPT_funique_section_names,
-                    options::OPT_fno_unique_section_names, true))
+                    options::OPT_fno_unique_section_names,
+                    !UsingIntegratedAssembler))
     CmdArgs.push_back("-fno-unique-section-names");
 
   Args.AddAllArgs(CmdArgs, options::OPT_finstrument_functions);
