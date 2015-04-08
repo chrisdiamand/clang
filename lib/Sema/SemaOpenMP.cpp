@@ -759,7 +759,7 @@ ExprResult Sema::ActOnOpenMPIdExpression(Scope *CurScope,
   // OpenMP [2.9.2, Restrictions, C/C++, p.2-6]
   //   A threadprivate directive must lexically precede all references to any
   //   of the variables in its list.
-  if (VD->isUsed()) {
+  if (VD->isUsed() && !DSAStack->isThreadPrivate(CanonicalVD)) {
     Diag(Id.getLoc(), diag::err_omp_var_used)
         << getOpenMPDirectiveName(OMPD_threadprivate) << VD;
     return ExprError();
@@ -1185,6 +1185,26 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   case OMPD_unknown:
     llvm_unreachable("Unknown OpenMP directive");
   }
+}
+
+StmtResult Sema::ActOnOpenMPRegionEnd(StmtResult S,
+                                      ArrayRef<OMPClause *> Clauses) {
+  if (!S.isUsable()) {
+    ActOnCapturedRegionError();
+    return StmtError();
+  }
+  // Mark all variables in private list clauses as used in inner region. This is
+  // required for proper codegen.
+  for (auto *Clause : Clauses) {
+    if (isOpenMPPrivate(Clause->getClauseKind())) {
+      for (auto *VarRef : Clause->children()) {
+        if (auto *E = cast_or_null<Expr>(VarRef)) {
+          MarkDeclarationsReferencedInExpr(E);
+        }
+      }
+    }
+  }
+  return ActOnCapturedRegionEnd(S.get());
 }
 
 static bool CheckNestingOfRegions(Sema &SemaRef, DSAStackTy *Stack,
