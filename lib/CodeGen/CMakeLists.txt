@@ -70,8 +70,6 @@ add_clang_library(clangCodeGen
   ItaniumCXXABI.cpp
   MicrosoftCXXABI.cpp
   ModuleBuilder.cpp
-  Crunch/AllocFunction.cpp
-  Crunch/AllocSite.cpp
   Crunch/Check.cpp
   Crunch/Crunch.cpp
   SanitizerMetadata.cpp

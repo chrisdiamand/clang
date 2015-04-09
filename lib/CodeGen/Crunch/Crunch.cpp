@@ -10,7 +10,6 @@
 #include <cstring>
 #include <iostream>
 
-#include "Crunch/AllocSite.h"
 #include "Crunch/Check.h"
 #include "Crunch/Crunch.h"
 
@@ -153,18 +152,6 @@ void emitCastCheck(CodeGenFunction &CGF, clang::Expr *ClangSrc,
 {
   Check c(CGF, ClangSrc, Src, DestClangTy);
   c.emit();
-}
-
-void visitAllocSite(clang::CodeGen::CodeGenFunction &CGF,
-                    const clang::CallExpr *Site)
-{
-  if (!CGF.SanOpts.has(clang::SanitizerKind::Crunch) &&
-      !CGF.SanOpts.has(clang::SanitizerKind::Allocs)) {
-    return;
-  }
-
-  AllocSite AS(CGF, const_cast<clang::CallExpr *>(Site));
-  AS.emitIfValid();
 }
 
 llvm::Constant *getSizeofFunction(clang::CodeGen::CodeGenFunction &CGF,

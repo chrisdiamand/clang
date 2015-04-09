@@ -324,8 +324,6 @@ public:
     if (E->getCallReturnType(CGF.getContext())->isReferenceType())
       return EmitLoadOfLValue(E);
 
-    Crunch::visitAllocSite(CGF, E);
-
     Value *V = CGF.EmitCallExpr(E).getScalarVal();
 
     EmitLValueAlignmentAssumption(E, V);

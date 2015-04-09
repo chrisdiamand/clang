@@ -12,15 +12,13 @@ enum CheckFunctionKind : unsigned int;
 void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF, clang::Expr *ClangSrc,
                    llvm::Value *Src, clang::QualType &DestClangTy);
 
-void visitAllocSite(clang::CodeGen::CodeGenFunction &,
-                    const clang::CallExpr *);
-
 llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
                             const clang::UnaryExprOrTypeTraitExpr *E,
                             llvm::Value *actualValue);
 
 std::string parseType(const clang::QualType &,
                       CheckFunctionKind *, int *);
+
 std::string getUniqtypeName(const clang::QualType &);
 
 } // namespace Crunch
