@@ -1,9 +1,9 @@
 set(LLVM_LINK_COMPONENTS
+  AllocSites
   Analysis
   BitReader
   BitWriter
   Core
-  Crunch
   IPO
   IRReader
   InstCombine

@@ -41,7 +41,7 @@
 #include "llvm/Transforms/ObjCARC.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
-#include "llvm/Transforms/Crunch.h"
+#include "llvm/Transforms/AllocSites.h"
 #include <memory>
 using namespace clang;
 using namespace llvm;
@@ -225,9 +225,9 @@ static void addThreadSanitizerPass(const PassManagerBuilder &Builder,
   PM.add(createThreadSanitizerPass());
 }
 
-static void addCrunchSanitizerPass(const PassManagerBuilder &Builder,
+static void addAllocSitesSanitizerPass(const PassManagerBuilder &Builder,
                                    legacy::PassManagerBase &PM) {
-  PM.add(createCrunchSanitizerPass());
+  PM.add(createAllocSitesSanitizerPass());
 }
 
 static void addDataFlowSanitizerPass(const PassManagerBuilder &Builder,
@@ -351,7 +351,7 @@ void EmitAssemblyHelper::CreatePasses() {
   if (LangOpts.Sanitize.has(SanitizerKind::Allocs) ||
       LangOpts.Sanitize.has(SanitizerKind::Crunch)) {
     PMBuilder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                           addCrunchSanitizerPass);
+                           addAllocSitesSanitizerPass);
   }
 
   // Figure out TargetLibraryInfo.
