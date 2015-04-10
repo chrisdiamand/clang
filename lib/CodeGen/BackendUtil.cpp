@@ -41,7 +41,7 @@
 #include "llvm/Transforms/ObjCARC.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
-#include "llvm/Transforms/AllocSites.h"
+#include "llvm/Transforms/AllocSites/AllocSites.h"
 #include <memory>
 using namespace clang;
 using namespace llvm;
