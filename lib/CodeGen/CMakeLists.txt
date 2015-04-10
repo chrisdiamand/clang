@@ -3,6 +3,7 @@ set(LLVM_LINK_COMPONENTS
   BitReader
   BitWriter
   Core
+  Crunch
   IPO
   IRReader
   InstCombine
