@@ -1928,8 +1928,10 @@ Value *ScalarExprEmitter::VisitUnaryLNot(const UnaryOperator *E) {
 Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
   // Try folding the offsetof to a constant.
   llvm::APSInt Value;
-  if (E->EvaluateAsInt(Value, CGF.getContext()))
-    return Builder.getInt(Value);
+  if (E->EvaluateAsInt(Value, CGF.getContext())) {
+    auto Ret = Builder.getInt(Value);
+    return Crunch::markSizeofExpr(CGF, E, Ret);
+  }
 
   // Loop over the components of the offsetof to compute the value.
   unsigned n = E->getNumComponents();
@@ -2011,7 +2013,7 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
     }
     Result = Builder.CreateAdd(Result, Offset);
   }
-  return Result;
+  return Crunch::markSizeofExpr(CGF, E, Result);
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Return the size or alignment of the type of
@@ -2054,10 +2056,7 @@ ScalarExprEmitter::VisitUnaryExprOrTypeTraitExpr(
     Ret = Builder.getInt(E->EvaluateKnownConstInt(CGF.getContext()));
   }
 
-  if (CGF.SanOpts.has(clang::SanitizerKind::Allocs) ||
-      CGF.SanOpts.has(clang::SanitizerKind::Crunch)) {
-    Ret = Crunch::markSizeofExpr(CGF, E, Ret);
-  }
+  Ret = Crunch::markSizeofExpr(CGF, E, Ret);
 
   return Ret;
 }
