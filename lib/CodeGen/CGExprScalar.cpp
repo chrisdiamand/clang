@@ -2054,7 +2054,8 @@ ScalarExprEmitter::VisitUnaryExprOrTypeTraitExpr(
     Ret = Builder.getInt(E->EvaluateKnownConstInt(CGF.getContext()));
   }
 
-  if (CGF.SanOpts.has(clang::SanitizerKind::Crunch)) {
+  if (CGF.SanOpts.has(clang::SanitizerKind::Allocs) ||
+      CGF.SanOpts.has(clang::SanitizerKind::Crunch)) {
     Ret = Crunch::markSizeofExpr(CGF, E, Ret);
   }
 
