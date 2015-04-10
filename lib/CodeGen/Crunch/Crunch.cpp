@@ -174,14 +174,25 @@ llvm::Constant *getSizeofFunction(clang::CodeGen::CodeGenFunction &CGF,
 /* We need to preserve sizeof expressions (instead of just returning a number)
  * so that their type ends up in the LLVM IR. */
 llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
-                            const clang::UnaryExprOrTypeTraitExpr *E,
-                            llvm::Value *ActualValue)
+                            const clang::Expr *E, llvm::Value *ActualValue)
 {
-  auto Kind = E->getKind();
-  if (Kind != clang::UETT_SizeOf) {
+  if (!isEnabled(CGF)) {
     return ActualValue;
   }
-  auto ArgType = E->getArgumentType();
+
+  clang::QualType ArgType;
+
+  if (auto SizeofExpr = dyn_cast<clang::UnaryExprOrTypeTraitExpr>(E)) {
+    auto Kind = SizeofExpr->getKind();
+    if (Kind != clang::UETT_SizeOf) {
+      return ActualValue;
+    }
+    ArgType = SizeofExpr->getArgumentType();
+
+  } else if (auto OffsetOfExpr = dyn_cast<clang::OffsetOfExpr>(E)) {
+    ArgType = OffsetOfExpr->getTypeSourceInfo()->getType();
+  }
+
   std::string TypeDesc = parseType_actual(ArgType, nullptr, nullptr);
 
   llvm::Value *Args[2];
