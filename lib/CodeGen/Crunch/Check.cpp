@@ -142,7 +142,7 @@ void Check::emitAssertFail() {
                                                CGF.CurFn->getName());
 
   llvm::Type *ArgTy[4];
-  for (unsigned int i = 0; i < 5; ++i) {
+  for (unsigned int i = 0; i < sizeof(ArgTy)/sizeof(*ArgTy); ++i) {
     ArgTy[i] = Args[i]->getType();
   }
   llvm::Type *ResTy = llvm::Type::getVoidTy(VMContext);
