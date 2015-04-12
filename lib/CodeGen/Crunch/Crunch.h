@@ -9,8 +9,13 @@ namespace Crunch {
 
 enum CheckFunctionKind : unsigned int;
 
-void emitCastCheck(clang::CodeGen::CodeGenFunction &CGF, clang::Expr *ClangSrc,
-                   llvm::Value *Src, clang::QualType &DestClangTy);
+void emitCastCheck(clang::CodeGen::CodeGenFunction &, const clang::Expr *,
+                   llvm::Value *, clang::QualType &);
+
+void emitCallCheck_pre(clang::CodeGen::CodeGenFunction &,
+                       const clang::CallExpr *);
+void emitCallCheck_post(clang::CodeGen::CodeGenFunction &,
+                        const clang::CallExpr *, llvm::Value *);
 
 llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &,
                             const clang::Expr *, llvm::Value *);

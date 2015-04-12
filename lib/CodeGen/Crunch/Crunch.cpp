@@ -147,7 +147,7 @@ std::string getUniqtypeName(const clang::QualType &Ty) {
   return "__uniqtype__" + parseType_actual(Ty, nullptr, nullptr);
 }
 
-void emitCastCheck(CodeGenFunction &CGF, clang::Expr *ClangSrc,
+void emitCastCheck(CodeGenFunction &CGF, const clang::Expr *ClangSrc,
                    llvm::Value *Src, clang::QualType &DestClangTy)
 {
   Check c(CGF, ClangSrc, Src, DestClangTy);
@@ -201,6 +201,36 @@ llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
   llvm::Constant *Fun = getSizeofFunction(CGF, Args);
 
   return CGF.Builder.CreateCall(Fun, Args);
+}
+
+void emitCallCheck_pre(clang::CodeGen::CodeGenFunction &CGF,
+                       const clang::CallExpr *E)
+{
+  if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
+    return;
+  }
+
+  // TODO: Add a __check_args_internal check before the function is called.
+}
+
+// Emit an __is_a check on the return value.
+void emitCallCheck_post(clang::CodeGen::CodeGenFunction &CGF,
+                        const clang::CallExpr *E, llvm::Value *Ret)
+{
+  if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
+    return;
+  }
+
+  if (E->getDirectCallee() != nullptr) { // Ignore direct calls.
+    return;
+  }
+
+  clang::QualType RetType = E->getCallReturnType(CGF.getContext());
+  if (!RetType->isPointerType()) { // We can't check non-pointer return types.
+    return;
+  }
+
+  emitCastCheck(CGF, E, Ret, RetType);
 }
 
 } // namespace Crunch
