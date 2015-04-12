@@ -320,13 +320,20 @@ public:
   }
   Value *VisitCastExpr(CastExpr *E);
 
-  Value *VisitCallExpr(const CallExpr *E) {
+  Value *VisitCallExpr_actual(const CallExpr *E) {
     if (E->getCallReturnType(CGF.getContext())->isReferenceType())
       return EmitLoadOfLValue(E);
 
     Value *V = CGF.EmitCallExpr(E).getScalarVal();
 
     EmitLValueAlignmentAssumption(E, V);
+    return V;
+  }
+
+  Value *VisitCallExpr(const CallExpr *E) {
+    Crunch::emitCallCheck_pre(CGF, E);
+    Value *V = VisitCallExpr_actual(E);
+    Crunch::emitCallCheck_post(CGF, E, V);
     return V;
   }
 

@@ -23,7 +23,7 @@ private:
   clang::CodeGen::CodeGenFunction &CGF;
   clang::CodeGen::CGBuilderTy &Builder;
   llvm::LLVMContext &VMContext;
-  clang::Expr *ClangSrc;
+  const clang::Expr *ClangSrc;
   llvm::Value *Src;
   clang::QualType &DestClangTy;
 
@@ -44,8 +44,8 @@ private:
   void emitAssert(llvm::Value *);
 
 public:
-  Check(clang::CodeGen::CodeGenFunction &_CGF, clang::Expr *_ClangSrc,
-        llvm::Value *_Src, clang::QualType &_DestClangTy);
+  Check(clang::CodeGen::CodeGenFunction &, const clang::Expr *,
+        llvm::Value *, clang::QualType &);
   void emit();
 };
 
