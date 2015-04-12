@@ -60,6 +60,13 @@ Check::Check(clang::CodeGen::CodeGenFunction &_CGF, clang::Expr *_ClangSrc,
   CrunchTypeName = parseType(PointeeTy, &CheckFunKind, &PointerDegree);
 }
 
+bool sloppyFunctionPointers() {
+  if (getenv("LIBCRUNCH_SLOPPY_FUNCTION_POINTERS") != nullptr) {
+    return true;
+  }
+  return false;
+}
+
 static std::string getCheckFunctionName(CheckFunctionKind Kind) {
   switch (Kind) {
     case CT_NoCheck:            return "__no_check";
@@ -161,6 +168,11 @@ void Check::emitIncrementCheckCount() {
 
 void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch) || CheckFunKind == CT_NoCheck)
+    return;
+
+  /* When sloppyFunctionPointers is enabled, we check the actual function call
+   * instead of the function pointer cast. */
+  if (sloppyFunctionPointers() && CheckFunKind == CT_FunctionRefining)
     return;
 
   /* The IsA check calls a function which already increments the counter for

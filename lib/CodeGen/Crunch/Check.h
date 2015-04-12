@@ -49,6 +49,8 @@ public:
   void emit();
 };
 
+bool sloppyFunctionPointers();
+
 } // namespace Crunch
 
 #endif
