@@ -331,7 +331,6 @@ public:
   }
 
   Value *VisitCallExpr(const CallExpr *E) {
-    Crunch::emitCallCheck_pre(CGF, E);
     Value *V = VisitCallExpr_actual(E);
     Crunch::checkCallRet(CGF, E, V);
     return V;

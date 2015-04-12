@@ -19,6 +19,7 @@
 #include "CGOpenMPRuntime.h"
 #include "CGRecordLayout.h"
 #include "CodeGenModule.h"
+#include "Crunch/Crunch.h"
 #include "TargetInfo.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
@@ -3428,6 +3429,10 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType, llvm::Value *Callee,
     llvm::Type *CalleeTy = getTypes().GetFunctionType(FnInfo);
     CalleeTy = CalleeTy->getPointerTo();
     Callee = Builder.CreateBitCast(Callee, CalleeTy, "callee.knr.cast");
+  }
+
+  if (E->getDirectCallee() == nullptr) { // Only check indirect calls.
+    Crunch::checkCallArgs(*this, Callee, Args);
   }
 
   return EmitCall(FnInfo, Callee, ReturnValue, Args, TargetDecl);

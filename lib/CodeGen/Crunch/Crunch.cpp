@@ -154,7 +154,7 @@ void emitCastCheck(CodeGenFunction &CGF, const clang::Expr *ClangSrc,
   c.emit();
 }
 
-llvm::Constant *getSizeofFunction(clang::CodeGen::CodeGenFunction &CGF,
+llvm::Constant *getSizeofFunction(CodeGen::CodeGenFunction &CGF,
                                   llvm::Value **Args)
 {
   llvm::Type *ArgTy[2];
@@ -173,7 +173,7 @@ llvm::Constant *getSizeofFunction(clang::CodeGen::CodeGenFunction &CGF,
 
 /* We need to preserve sizeof expressions (instead of just returning a number)
  * so that their type ends up in the LLVM IR. */
-llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
+llvm::Value *markSizeofExpr(CodeGen::CodeGenFunction &CGF,
                             const clang::Expr *E, llvm::Value *ActualValue)
 {
   if (!isEnabled(CGF)) {
@@ -203,18 +203,61 @@ llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &CGF,
   return CGF.Builder.CreateCall(Fun, Args);
 }
 
-void emitCallCheck_pre(clang::CodeGen::CodeGenFunction &CGF,
-                       const clang::CallExpr *E)
+static void getArgValues(const CodeGen::CallArgList &ArgList,
+                         std::vector<llvm::Value *> *Ret)
+{
+  for (auto it = ArgList.begin(); it != ArgList.end(); ++it) {
+    if ((*it).RV.isScalar()) {
+      Ret->push_back((*it).RV.getScalarVal());
+    } else if ((*it).RV.isAggregate()) {
+      Ret->push_back((*it).RV.getAggregateAddr());
+    } else { // if (RV.isComplex())
+      assert(false && "RValue not scalar or aggregate?");
+    }
+  }
+}
+
+static llvm::Constant *getCheckArgsFun(CodeGen::CodeGenFunction &CGF,
+                                       const std::vector<llvm::Value *> &Args)
+{
+  llvm::Module &TheModule = CGF.CGM.getModule();
+
+  std::vector<llvm::Type *> ArgTy;
+  for (auto it = Args.begin(); it != Args.end(); ++it) {
+    ArgTy.push_back((*it)->getType());
+  }
+  llvm::Type *RetTy = llvm::Type::getInt32Ty(CGF.getLLVMContext());
+
+  llvm::ArrayRef<llvm::Type *> ArgTy_ar(ArgTy);
+  llvm::FunctionType *FunTy = llvm::FunctionType::get(RetTy, ArgTy_ar, false);
+
+  return TheModule.getOrInsertFunction("__check_args_internal", FunTy);
+}
+
+void checkCallArgs(CodeGen::CodeGenFunction &CGF,
+                   llvm::Value *Callee, CodeGen::CallArgList &ArgList)
 {
   if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
     return;
   }
 
-  // TODO: Add a __check_args_internal check before the function is called.
+  std::vector<llvm::Value *> Args;
+  Args.push_back(Callee);
+
+  auto IntTy = llvm::Type::getInt32Ty(CGF.getLLVMContext());
+  Args.push_back(llvm::ConstantInt::get(IntTy, ArgList.size()));
+
+  getArgValues(ArgList, &Args);
+
+  llvm::Constant *Fun = getCheckArgsFun(CGF, Args);
+
+  llvm::Value *CheckRet = CGF.Builder.CreateCall(Fun, Args, "args_check");
+  // TODO: Assert this value.
+  CheckRet->dump();
 }
 
 // Emit an __is_a check on the return value.
-void checkCallRet(clang::CodeGen::CodeGenFunction &CGF,
+void checkCallRet(CodeGen::CodeGenFunction &CGF,
                   const clang::CallExpr *E, llvm::Value *Ret)
 {
   if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
