@@ -214,8 +214,8 @@ void emitCallCheck_pre(clang::CodeGen::CodeGenFunction &CGF,
 }
 
 // Emit an __is_a check on the return value.
-void emitCallCheck_post(clang::CodeGen::CodeGenFunction &CGF,
-                        const clang::CallExpr *E, llvm::Value *Ret)
+void checkCallRet(clang::CodeGen::CodeGenFunction &CGF,
+                  const clang::CallExpr *E, llvm::Value *Ret)
 {
   if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
     return;

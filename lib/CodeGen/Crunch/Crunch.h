@@ -14,8 +14,8 @@ void emitCastCheck(clang::CodeGen::CodeGenFunction &, const clang::Expr *,
 
 void emitCallCheck_pre(clang::CodeGen::CodeGenFunction &,
                        const clang::CallExpr *);
-void emitCallCheck_post(clang::CodeGen::CodeGenFunction &,
-                        const clang::CallExpr *, llvm::Value *);
+void checkCallRet(clang::CodeGen::CodeGenFunction &,
+                  const clang::CallExpr *, llvm::Value *);
 
 llvm::Value *markSizeofExpr(clang::CodeGen::CodeGenFunction &,
                             const clang::Expr *, llvm::Value *);

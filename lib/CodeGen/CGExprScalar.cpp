@@ -333,7 +333,7 @@ public:
   Value *VisitCallExpr(const CallExpr *E) {
     Crunch::emitCallCheck_pre(CGF, E);
     Value *V = VisitCallExpr_actual(E);
-    Crunch::emitCallCheck_post(CGF, E, V);
+    Crunch::checkCallRet(CGF, E, V);
     return V;
   }
 
