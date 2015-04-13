@@ -12,6 +12,7 @@
 
 #include "Crunch/Check.h"
 #include "Crunch/Crunch.h"
+#include "Crunch/Emit.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -98,74 +99,6 @@ llvm::Constant *Check::getCheckFunction(llvm::Type *SecondArg) {
   return Ret;
 }
 
-/* Emit the functionality of the '__inline_assert' macro, i.e.:
- * if (!Pred) { __assert_fail(...); } */
-void Check::emitAssert(llvm::Value *Pred) {
-  llvm::BasicBlock *StartBB, *BodyBB, *ExitBB;
-  StartBB = Builder.GetInsertBlock();
-
-  // Negate the condition by comparing to zero.
-  Pred = Builder.CreateICmpEQ(Pred,
-                              llvm::ConstantInt::get(Pred->getType(), 0),
-                              "crunchAssert.cond");
-
-  BodyBB = CGF.createBasicBlock("crunchAssert.body", CGF.CurFn);
-  ExitBB = CGF.createBasicBlock("crunchAssert.exit");
-
-  Builder.CreateCondBr(Pred, BodyBB, ExitBB);
-
-  // Generate the 'if' body
-  Builder.SetInsertPoint(BodyBB);
-  emitAssertFail();
-  Builder.CreateBr(ExitBB);
-
-  CGF.CurFn->getBasicBlockList().push_back(ExitBB);
-  Builder.SetInsertPoint(ExitBB);
-}
-
-/* Emit the 'false' case of the '__inline_assert' macro, i.e.:
- * __assert_fail(...); */
-void Check::emitAssertFail() {
-  std::string Message = getCheckFunctionName(CheckFunKind)
-                      + "(?, " + CrunchTypeName + ")";
-
-  llvm::Value *Args[4];
-  Args[0] = llvm::ConstantDataArray::getString(VMContext, Message);
-
-  clang::SourceLocation Loc = ClangSrc->getExprLoc();
-  clang::SourceManager &SM = CGF.getContext().getSourceManager();
-  Args[1] = llvm::ConstantDataArray::getString(VMContext,
-                                               SM.getBufferName(Loc));
-  Args[2] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(VMContext),
-                                   SM.getPresumedLineNumber(Loc));
-  Args[3] = llvm::ConstantDataArray::getString(VMContext,
-                                               CGF.CurFn->getName());
-
-  llvm::Type *ArgTy[4];
-  for (unsigned int i = 0; i < sizeof(ArgTy)/sizeof(*ArgTy); ++i) {
-    ArgTy[i] = Args[i]->getType();
-  }
-  llvm::Type *ResTy = llvm::Type::getVoidTy(VMContext);
-
-  llvm::ArrayRef<llvm::Type *> ArgTy_ar(const_cast<llvm::Type **>(ArgTy), 4);
-  llvm::FunctionType *FunTy = llvm::FunctionType::get(ResTy, ArgTy_ar, false);
-
-  llvm::Constant *AssertFun = getModule().getOrInsertFunction("__assert_fail",
-                                                              FunTy);
-  Builder.CreateCall(AssertFun, Args);
-}
-
-void Check::emitIncrementCheckCount() {
-  const StringRef CCName = "__libcrunch_begun";
-  llvm::Type *CCType = llvm::Type::getInt32Ty(VMContext);
-  llvm::Constant *CheckCount = getModule().getOrInsertGlobal(CCName, CCType);
-  llvm::Constant *One = llvm::ConstantInt::get(CCType, 1);
-
-  llvm::LoadInst *CCLoaded = Builder.CreateLoad(CheckCount);
-  llvm::Value *CCAddOne = Builder.CreateAdd(CCLoaded, One, "CheckCount");
-  Builder.CreateStore(CCAddOne, CheckCount);
-}
-
 void Check::emit() {
   if (!CGF.SanOpts.has(SanitizerKind::Crunch) || CheckFunKind == CT_NoCheck)
     return;
@@ -178,7 +111,7 @@ void Check::emit() {
   /* The IsA check calls a function which already increments the counter for
    * us. The other calls just skip straight to calling %_internal. */
   if (CheckFunKind != CT_IsA) {
-    emitIncrementCheckCount();
+    emitIncrementCheckCount(CGF);
   }
 
   // Cast the pointer to int8_t * to match __is_aU().
@@ -194,7 +127,9 @@ void Check::emit() {
 
   llvm::Value *CheckRet = Builder.CreateCall(CheckFun, ArgsV, "crunch_check");
 
-  emitAssert(CheckRet);
+  const std::string Msg = getCheckFunctionName(CheckFunKind)
+                  + "(?, " + CrunchTypeName + ")";
+  emitAssert(CGF, CheckRet, Msg, ClangSrc->getExprLoc());
 }
 
 } // namespace Crunch

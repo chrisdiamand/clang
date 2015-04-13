@@ -39,9 +39,6 @@ private:
 
   llvm::Value *getUniqtypeVariable();
   llvm::Constant *getCheckFunction(llvm::Type *);
-  void emitIncrementCheckCount();
-  void emitAssertFail();
-  void emitAssert(llvm::Value *);
 
 public:
   Check(clang::CodeGen::CodeGenFunction &, const clang::Expr *,
