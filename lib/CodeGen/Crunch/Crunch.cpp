@@ -12,6 +12,7 @@
 
 #include "Crunch/Check.h"
 #include "Crunch/Crunch.h"
+#include "Crunch/Emit.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -234,12 +235,12 @@ static llvm::Constant *getCheckArgsFun(CodeGen::CodeGenFunction &CGF,
   return TheModule.getOrInsertFunction("__check_args_internal", FunTy);
 }
 
-void checkCallArgs(CodeGen::CodeGenFunction &CGF,
+void checkCallArgs(CodeGen::CodeGenFunction &CGF, const clang::CallExpr *E,
                    llvm::Value *Callee, CodeGen::CallArgList &ArgList)
 {
-  if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
+  if (!isEnabled(CGF) || !sloppyFunctionPointers() ||
+      E->getDirectCallee() != nullptr) // Ignore direct calls.
     return;
-  }
 
   std::vector<llvm::Value *> Args;
   Args.push_back(Callee);
@@ -250,23 +251,18 @@ void checkCallArgs(CodeGen::CodeGenFunction &CGF,
   getArgValues(ArgList, &Args);
 
   llvm::Constant *Fun = getCheckArgsFun(CGF, Args);
-
   llvm::Value *CheckRet = CGF.Builder.CreateCall(Fun, Args, "args_check");
-  // TODO: Assert this value.
-  CheckRet->dump();
+
+  emitAssert(CGF, CheckRet, "__check_args_internal()", E->getExprLoc());
 }
 
 // Emit an __is_a check on the return value.
 void checkCallRet(CodeGen::CodeGenFunction &CGF,
                   const clang::CallExpr *E, llvm::Value *Ret)
 {
-  if (!isEnabled(CGF) || !sloppyFunctionPointers()) {
+  if (!isEnabled(CGF) || !sloppyFunctionPointers() ||
+      E->getDirectCallee() != nullptr) // Ignore direct calls.
     return;
-  }
-
-  if (E->getDirectCallee() != nullptr) { // Ignore direct calls.
-    return;
-  }
 
   clang::QualType RetType = E->getCallReturnType(CGF.getContext());
   if (!RetType->isPointerType()) { // We can't check non-pointer return types.

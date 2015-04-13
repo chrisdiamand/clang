@@ -12,7 +12,7 @@ enum CheckFunctionKind : unsigned int;
 void emitCastCheck(clang::CodeGen::CodeGenFunction &, const clang::Expr *,
                    llvm::Value *, clang::QualType &);
 
-void checkCallArgs(clang::CodeGen::CodeGenFunction &,
+void checkCallArgs(clang::CodeGen::CodeGenFunction &, const clang::CallExpr *,
                    llvm::Value *, clang::CodeGen::CallArgList &);
 
 void checkCallRet(clang::CodeGen::CodeGenFunction &,

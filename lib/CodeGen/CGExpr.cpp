@@ -3431,9 +3431,7 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType, llvm::Value *Callee,
     Callee = Builder.CreateBitCast(Callee, CalleeTy, "callee.knr.cast");
   }
 
-  if (E->getDirectCallee() == nullptr) { // Only check indirect calls.
-    Crunch::checkCallArgs(*this, Callee, Args);
-  }
+  Crunch::checkCallArgs(*this, E, Callee, Args);
 
   return EmitCall(FnInfo, Callee, ReturnValue, Args, TargetDecl);
 }
