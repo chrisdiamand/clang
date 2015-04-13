@@ -73,6 +73,7 @@ add_clang_library(clangCodeGen
   ModuleBuilder.cpp
   Crunch/Check.cpp
   Crunch/Crunch.cpp
+  Crunch/Emit.cpp
   SanitizerMetadata.cpp
   TargetInfo.cpp
 
