@@ -69,6 +69,10 @@ static std::string parseType_actual(const clang::QualType &NonCanonicalTy,
   // Remove typedefs.
   auto Ty = NonCanonicalTy.getCanonicalType();
 
+  if (auto ArrayTy = dyn_cast<clang::ArrayType>(Ty)) {
+    Ty = ArrayTy->getElementType();
+  }
+
   if (Ty->isBuiltinType()) {
     auto BTy = clang::cast<clang::BuiltinType>(Ty);
     if (BTy->isVoidType()) {
@@ -188,7 +192,7 @@ llvm::Value *markSizeofExpr(CodeGen::CodeGenFunction &CGF,
     if (Kind != clang::UETT_SizeOf) {
       return ActualValue;
     }
-    ArgType = SizeofExpr->getArgumentType();
+    ArgType = SizeofExpr->getTypeOfArgument();
 
   } else if (auto OffsetOfExpr = dyn_cast<clang::OffsetOfExpr>(E)) {
     ArgType = OffsetOfExpr->getTypeSourceInfo()->getType();
