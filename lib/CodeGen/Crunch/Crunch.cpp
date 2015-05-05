@@ -25,9 +25,9 @@ static std::string getBuiltinTypeName(const BuiltinType *Ty) {
   switch (Ty->getKind()) {
     case BuiltinType::Void:       return "void";
     case BuiltinType::Bool:       return "bool";
-    case BuiltinType::Char_S:     return "char";
+    case BuiltinType::Char_S:     return "signed_char";
     case BuiltinType::Char_U:     return "unsigned_char";
-    case BuiltinType::SChar:      return "char";
+    case BuiltinType::SChar:      return "signed_char";
     case BuiltinType::UChar:      return "unsigned_char";
     case BuiltinType::WChar_S:    return "wchar_t";
     case BuiltinType::WChar_U:    return "unsigned_wchar_t";
