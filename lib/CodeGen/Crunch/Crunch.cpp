@@ -196,9 +196,15 @@ llvm::Value *markSizeofExpr(CodeGen::CodeGenFunction &CGF,
 
   } else if (auto OffsetOfExpr = dyn_cast<clang::OffsetOfExpr>(E)) {
     ArgType = OffsetOfExpr->getTypeSourceInfo()->getType();
+  } else {
+    return ActualValue;
   }
 
   std::string TypeDesc = parseType_actual(ArgType, nullptr, nullptr);
+
+  if (TypeDesc.size() == 0) { // Anonymous struct, for example.
+    return ActualValue;
+  }
 
   llvm::Value *Args[2];
   Args[0] = llvm::ConstantDataArray::getString(CGF.getLLVMContext(), TypeDesc);
