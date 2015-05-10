@@ -227,6 +227,7 @@ static void addThreadSanitizerPass(const PassManagerBuilder &Builder,
 
 static void addAllocSitesSanitizerPass(const PassManagerBuilder &Builder,
                                    legacy::PassManagerBase &PM) {
+  PM.add(createSROAPass());
   PM.add(createAllocSitesSanitizerPass());
 }
 
