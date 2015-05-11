@@ -54,17 +54,22 @@ static std::string getBuiltinTypeName(const BuiltinType *Ty) {
   return "UNKNOWN";
 }
 
+struct TypeParse {
+  std::string         UniqtypeName;
+  CheckFunctionKind   CheckFunKind;
+  int                 PointerDegree;
+};
+
 /* Recurse down the type structure, returning the string used by libcrunch to
  * represent that type, and finding out which libcrunch function needs to be
  * called to check it. */
-static std::string parseType_actual(const clang::QualType &NonCanonicalTy,
-                                    CheckFunctionKind *CheckFunResult,
-                                    int *PointerDegree)
-{
+static TypeParse parseType_actual(const clang::QualType &NonCanonicalTy) {
   clang::LangOptions langOpts;
   clang::PrintingPolicy printPol(langOpts);
-  CheckFunctionKind CheckFunKind = CT_IsA;
-  std::string Ret = "__UNKNOWN_TYPE__";
+  TypeParse Ret;
+  Ret.UniqtypeName = "__UNKNOWN_TYPE__";
+  Ret.CheckFunKind = CT_IsA;
+  Ret.PointerDegree = 0;
 
   // Remove typedefs.
   auto Ty = NonCanonicalTy.getCanonicalType();
@@ -76,80 +81,88 @@ static std::string parseType_actual(const clang::QualType &NonCanonicalTy,
   if (Ty->isBuiltinType()) {
     auto BTy = clang::cast<clang::BuiltinType>(Ty);
     if (BTy->isVoidType()) {
-      CheckFunKind = CT_PointerOfDegree;
+      Ret.CheckFunKind = CT_PointerOfDegree;
     } else {
-      CheckFunKind = CT_IsA;
+      Ret.CheckFunKind = CT_IsA;
     }
-    Ret = getBuiltinTypeName(BTy);
+    Ret.UniqtypeName = getBuiltinTypeName(BTy);
 
   } else if (Ty->isRecordType()) {
     auto RTy = Ty->getAsStructureType();
     auto Decl = RTy->getDecl();
-    Ret = Decl->getName().str();
+    Ret.UniqtypeName = Decl->getName().str();
     /* Crunchcc generates a __named_a check when there is no definition, or a
      * __is_a check otherwise. */
     if (Decl->getDefinition() == nullptr) {
-      CheckFunKind = CT_Named;
+      Ret.CheckFunKind = CT_Named;
     } else {
-      CheckFunKind = CT_IsA;
+      Ret.CheckFunKind = CT_IsA;
     }
+    Ret.PointerDegree = 0;
 
   } else if (Ty->isPointerType()) {
     clang::QualType PtrTy = Ty->getPointeeType();
-    Ret = "__PTR_" + parseType_actual(PtrTy, &CheckFunKind, nullptr);
-
-    if (PointerDegree != nullptr) {
-      *PointerDegree += 1;
-    }
+    TypeParse Pointee = parseType_actual(PtrTy);
+    Ret.UniqtypeName = "__PTR_" + Pointee.UniqtypeName;
+    Ret.CheckFunKind = Pointee.CheckFunKind;
+    Ret.PointerDegree = Pointee.PointerDegree + 1;
 
   } else if (Ty->isFunctionProtoType()) {
     auto FTy = clang::cast<const clang::FunctionProtoType>(Ty);
-    Ret = "__FUN_FROM_";
+    Ret.UniqtypeName = "__FUN_FROM_";
 
     int NumParams = FTy->getNumParams();
     for (int i = 0; i < NumParams; ++i) {
-      Ret += "__ARG" + std::to_string(i) + "_";
-      Ret += parseType_actual(FTy->getParamType(i), nullptr, nullptr);
+      Ret.UniqtypeName += "__ARG" + std::to_string(i) + "_";
+      Ret.UniqtypeName += parseType_actual(FTy->getParamType(i)).UniqtypeName;
     }
 
     auto ReturnType = FTy->getReturnType();
-    Ret += "__FUN_TO_" + parseType_actual(ReturnType, nullptr, nullptr);
-    CheckFunKind = CT_FunctionRefining;
+    Ret.UniqtypeName += "__FUN_TO_"
+                     + parseType_actual(ReturnType).UniqtypeName;
+    Ret.CheckFunKind = CT_FunctionRefining;
+    Ret.PointerDegree = 0;
 
   } else {
     std::cerr << "Unknown type class: ";
     Ty->dump();
   }
 
-  if (CheckFunResult != nullptr) {
-    *CheckFunResult = CheckFunKind;
-  }
+  assert(Ret.CheckFunKind == CT_IsA ||
+         Ret.CheckFunKind == CT_Named ||
+         Ret.CheckFunKind == CT_FunctionRefining ||
+         Ret.CheckFunKind == CT_PointerOfDegree);
 
   return Ret;
 }
 
 // Wrapper to skip checks to 'void *' and 'char *'.
 std::string parseType(const clang::QualType &Ty,
-                             CheckFunctionKind *CheckFunResult,
-                             int *PointerDegree)
+                      CheckFunctionKind *CheckFunResult,
+                      int *PointerDegree)
 {
-  if (PointerDegree) {
-    *PointerDegree = 0;
+  if (Ty->isVoidType() || Ty->isCharType()) {
+    if (CheckFunResult) {
+      *CheckFunResult = CT_NoCheck;
+    }
+    return "ERROR";
   }
+
+  TypeParse Parse = parseType_actual(Ty);
 
   if (CheckFunResult) {
-    *CheckFunResult = CT_NoCheck;
+    *CheckFunResult = Parse.CheckFunKind;
   }
 
-  if (!Ty->isVoidType() && !Ty->isCharType()) {
-    return parseType_actual(Ty, CheckFunResult, PointerDegree);
+  if (PointerDegree) {
+    *PointerDegree = Parse.PointerDegree;
   }
 
-  return "ERROR";
+  return Parse.UniqtypeName;
 }
 
 std::string getUniqtypeName(const clang::QualType &Ty) {
-  return "__uniqtype__" + parseType_actual(Ty, nullptr, nullptr);
+  return "__uniqtype__" + parseType_actual(Ty).UniqtypeName;
 }
 
 void emitCastCheck(CodeGenFunction &CGF, const clang::Expr *ClangSrc,
@@ -200,7 +213,7 @@ llvm::Value *markSizeofExpr(CodeGen::CodeGenFunction &CGF,
     return ActualValue;
   }
 
-  std::string TypeDesc = parseType_actual(ArgType, nullptr, nullptr);
+  std::string TypeDesc = parseType_actual(ArgType).UniqtypeName;
 
   if (TypeDesc.size() == 0) { // Anonymous struct, for example.
     return ActualValue;

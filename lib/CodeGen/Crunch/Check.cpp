@@ -43,6 +43,7 @@ llvm::Value *Check::getUniqtypeVariable() {
                                     PointerDegree);
   }
 
+  assert(false && "Invalid CheckFunKind");
   return nullptr;
 }
 
@@ -57,7 +58,6 @@ Check::Check(clang::CodeGen::CodeGenFunction &_CGF, const clang::Expr *_ClSrc,
    * that the QualType can't be casted directly to a FunctionProtoType. */
   PointeeTy = PointeeTy.IgnoreParens();
 
-  PointerDegree = 0;
   CrunchTypeName = parseType(PointeeTy, &CheckFunKind, &PointerDegree);
 }
 
@@ -121,6 +121,7 @@ void Check::emit() {
   ArgsV.push_back(Src);
 
   llvm::Value *Uniqtype = getUniqtypeVariable();
+  assert(Uniqtype != nullptr);
   llvm::Constant *CheckFun = getCheckFunction(Uniqtype->getType());
 
   ArgsV.push_back(Uniqtype);
