@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <unordered_map>
 
 #include "Crunch/Check.h"
 #include "Crunch/Crunch.h"
@@ -64,15 +65,21 @@ struct TypeParse {
  * represent that type, and finding out which libcrunch function needs to be
  * called to check it. */
 static TypeParse parseType_actual(const clang::QualType &NonCanonicalTy) {
+  // Remove typedefs.
+  auto Ty = NonCanonicalTy.getCanonicalType();
+
+  static std::unordered_map<const clang::Type *, TypeParse> History;
+  const clang::Type *TypePtr = Ty.getTypePtr();
+  if (History.find(TypePtr) != History.end()) {
+    return History[TypePtr];
+  }
+
   clang::LangOptions langOpts;
   clang::PrintingPolicy printPol(langOpts);
   TypeParse Ret;
   Ret.UniqtypeName = "__UNKNOWN_TYPE__";
   Ret.CheckFunKind = CT_IsA;
   Ret.PointerDegree = 0;
-
-  // Remove typedefs.
-  auto Ty = NonCanonicalTy.getCanonicalType();
 
   if (auto ArrayTy = dyn_cast<clang::ArrayType>(Ty)) {
     Ty = ArrayTy->getElementType();
@@ -133,6 +140,7 @@ static TypeParse parseType_actual(const clang::QualType &NonCanonicalTy) {
          Ret.CheckFunKind == CT_FunctionRefining ||
          Ret.CheckFunKind == CT_PointerOfDegree);
 
+  History[TypePtr] = Ret;
   return Ret;
 }
 
