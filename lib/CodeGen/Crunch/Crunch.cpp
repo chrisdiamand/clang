@@ -238,11 +238,11 @@ llvm::Value *markSizeofExpr(CodeGen::CodeGenFunction &CGF,
 static void getArgValues(const CodeGen::CallArgList &ArgList,
                          std::vector<llvm::Value *> *Ret)
 {
-  for (auto it = ArgList.begin(); it != ArgList.end(); ++it) {
-    if ((*it).RV.isScalar()) {
-      Ret->push_back((*it).RV.getScalarVal());
-    } else if ((*it).RV.isAggregate()) {
-      Ret->push_back((*it).RV.getAggregateAddr());
+  for (const CodeGen::CallArg &Arg : ArgList) {
+    if (Arg.RV.isScalar()) {
+      Ret->push_back(Arg.RV.getScalarVal());
+    } else if (Arg.RV.isAggregate()) {
+      Ret->push_back(Arg.RV.getAggregatePointer());
     } else { // if (RV.isComplex())
       assert(false && "RValue not scalar or aggregate?");
     }

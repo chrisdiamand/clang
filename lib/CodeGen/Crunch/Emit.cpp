@@ -78,9 +78,10 @@ void emitIncrementCheckCount(clang::CodeGen::CodeGenFunction &CGF) {
   llvm::Constant *CheckCount = TheModule.getOrInsertGlobal(CCName, CCType);
   llvm::Constant *One = llvm::ConstantInt::get(CCType, 1);
 
-  llvm::LoadInst *CCLoaded = CGF.Builder.CreateLoad(CheckCount);
-  llvm::Value *CCAddOne = CGF.Builder.CreateAdd(CCLoaded, One, "CheckCount");
-  CGF.Builder.CreateStore(CCAddOne, CheckCount);
+  clang::CodeGen::Address CCAddr(CheckCount, CGF.getPointerAlign());
+  llvm::LoadInst *CCLoaded = CGF.Builder.CreateLoad(CCAddr);
+  llvm::Value *CCAddOne = CGF.Builder.CreateAdd(CCLoaded, One, "CheckCount.inc");
+  CGF.Builder.CreateStore(CCAddOne, CCAddr);
 }
 
 } // namespace Crunch
