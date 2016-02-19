@@ -85,6 +85,7 @@ public:
     IgnoredComma = 0x80,   // This comma is not a macro argument separator (MS).
     StringifiedInMacro = 0x100, // This string or character literal is formed by
                                 // macro stringizing or charizing operator.
+    CommaAfterElided = 0x200, // The comma following this token was elided (MS).
   };
 
   tok::TokenKind getKind() const { return Kind; }
@@ -94,6 +95,13 @@ public:
   /// "if (Tok.is(tok::l_brace)) {...}".
   bool is(tok::TokenKind K) const { return Kind == K; }
   bool isNot(tok::TokenKind K) const { return Kind != K; }
+  bool isOneOf(tok::TokenKind K1, tok::TokenKind K2) const {
+    return is(K1) || is(K2);
+  }
+  template <typename... Ts>
+  bool isOneOf(tok::TokenKind K1, tok::TokenKind K2, Ts... Ks) const {
+    return is(K1) || isOneOf(K2, Ks...);
+  }
 
   /// \brief Return true if this is a raw identifier (when lexing
   /// in raw mode) or a non-keyword identifier (when lexing in non-raw mode).
@@ -289,6 +297,11 @@ public:
   /// operator.
   bool stringifiedInMacro() const {
     return (Flags & StringifiedInMacro) ? true : false;
+  }
+
+  /// Returns true if the comma after this token was elided.
+  bool commaAfterElided() const {
+    return (Flags & CommaAfterElided) ? true : false;
   }
 };
 

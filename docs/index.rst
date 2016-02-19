@@ -24,12 +24,17 @@ Using Clang as a Compiler
    AddressSanitizer
    ThreadSanitizer
    MemorySanitizer
+   UndefinedBehaviorSanitizer
    DataFlowSanitizer
    LeakSanitizer
+   SanitizerCoverage
+   SanitizerStats
    SanitizerSpecialCaseList
    ControlFlowIntegrity
+   SafeStack
    Modules
    MSVCCompatibility
+   CommandGuide/index
    FAQ
 
 Using Clang as a Library

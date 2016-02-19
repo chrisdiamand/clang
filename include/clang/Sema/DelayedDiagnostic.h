@@ -113,7 +113,8 @@ private:
 /// the complete parsing of the current declaration.
 class DelayedDiagnostic {
 public:
-  enum DDKind { Deprecation, Unavailable, Access, ForbiddenType };
+  enum DDKind { Deprecation, Unavailable, Access, ForbiddenType,
+                NotYetIntroduced };
 
   unsigned char Kind; // actually a DDKind
   bool Triggered;
@@ -165,13 +166,15 @@ public:
   }
 
   const NamedDecl *getDeprecationDecl() const {
-    assert((Kind == Deprecation || Kind == Unavailable) &&
+    assert((Kind == Deprecation || Kind == Unavailable ||
+            Kind == NotYetIntroduced) &&
            "Not a deprecation diagnostic.");
     return DeprecationData.Decl;
   }
 
   StringRef getDeprecationMessage() const {
-    assert((Kind == Deprecation || Kind == Unavailable) &&
+    assert((Kind == Deprecation || Kind == Unavailable ||
+            Kind == NotYetIntroduced) &&
            "Not a deprecation diagnostic.");
     return StringRef(DeprecationData.Message,
                            DeprecationData.MessageLen);
@@ -248,6 +251,17 @@ public:
     for (SmallVectorImpl<DelayedDiagnostic>::iterator
            i = Diagnostics.begin(), e = Diagnostics.end(); i != e; ++i)
       i->Destroy();
+  }
+
+  DelayedDiagnosticPool(DelayedDiagnosticPool &&Other)
+    : Parent(Other.Parent), Diagnostics(std::move(Other.Diagnostics)) {
+    Other.Diagnostics.clear();
+  }
+  DelayedDiagnosticPool &operator=(DelayedDiagnosticPool &&Other) {
+    Parent = Other.Parent;
+    Diagnostics = std::move(Other.Diagnostics);
+    Other.Diagnostics.clear();
+    return *this;
   }
 
   const DelayedDiagnosticPool *getParent() const { return Parent; }

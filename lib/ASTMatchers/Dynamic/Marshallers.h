@@ -1,4 +1,4 @@
-//===--- Marshallers.h - Generic matcher function marshallers -*- C++ -*-===//
+//===--- Marshallers.h - Generic matcher function marshallers ---*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -31,7 +31,6 @@ namespace clang {
 namespace ast_matchers {
 namespace dynamic {
 namespace internal {
-
 
 /// \brief Helper template class to just from argument type to the right is/get
 ///   functions in VariantValue.
@@ -104,7 +103,7 @@ public:
 class MatcherDescriptor {
 public:
   virtual ~MatcherDescriptor() {}
-  virtual VariantMatcher create(const SourceRange &NameRange,
+  virtual VariantMatcher create(SourceRange NameRange,
                                 ArrayRef<ParserValue> Args,
                                 Diagnostics *Error) const = 0;
 
@@ -162,7 +161,7 @@ class FixedArgCountMatcherDescriptor : public MatcherDescriptor {
 public:
   typedef VariantMatcher (*MarshallerType)(void (*Func)(),
                                            StringRef MatcherName,
-                                           const SourceRange &NameRange,
+                                           SourceRange NameRange,
                                            ArrayRef<ParserValue> Args,
                                            Diagnostics *Error);
 
@@ -180,19 +179,21 @@ public:
         RetKinds(RetKinds.begin(), RetKinds.end()),
         ArgKinds(ArgKinds.begin(), ArgKinds.end()) {}
 
-  VariantMatcher create(const SourceRange &NameRange,
-                        ArrayRef<ParserValue> Args, Diagnostics *Error) const {
+  VariantMatcher create(SourceRange NameRange,
+                        ArrayRef<ParserValue> Args,
+                        Diagnostics *Error) const override {
     return Marshaller(Func, MatcherName, NameRange, Args, Error);
   }
 
-  bool isVariadic() const { return false; }
-  unsigned getNumArgs() const { return ArgKinds.size(); }
+  bool isVariadic() const override { return false; }
+  unsigned getNumArgs() const override { return ArgKinds.size(); }
   void getArgKinds(ast_type_traits::ASTNodeKind ThisKind, unsigned ArgNo,
-                   std::vector<ArgKind> &Kinds) const {
+                   std::vector<ArgKind> &Kinds) const override {
     Kinds.push_back(ArgKinds[ArgNo]);
   }
-  bool isConvertibleTo(ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
-                       ast_type_traits::ASTNodeKind *LeastDerivedKind) const {
+  bool isConvertibleTo(
+      ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
+      ast_type_traits::ASTNodeKind *LeastDerivedKind) const override {
     return isRetKindConvertibleTo(RetKinds, Kind, Specificity,
                                   LeastDerivedKind);
   }
@@ -232,7 +233,7 @@ static VariantMatcher outvalueToVariantMatcher(const DynTypedMatcher &Matcher) {
 template <typename T>
 static VariantMatcher outvalueToVariantMatcher(const T &PolyMatcher,
                                                typename T::ReturnTypes * =
-                                                   NULL) {
+                                                   nullptr) {
   std::vector<DynTypedMatcher> Matchers;
   mergePolyMatchers(PolyMatcher, Matchers, typename T::ReturnTypes());
   VariantMatcher Out = VariantMatcher::PolymorphicMatcher(std::move(Matchers));
@@ -277,7 +278,7 @@ struct BuildReturnTypeVector<ast_matchers::internal::BindableMatcher<T> > {
 template <typename ResultT, typename ArgT,
           ResultT (*Func)(ArrayRef<const ArgT *>)>
 VariantMatcher
-variadicMatcherDescriptor(StringRef MatcherName, const SourceRange &NameRange,
+variadicMatcherDescriptor(StringRef MatcherName, SourceRange NameRange,
                           ArrayRef<ParserValue> Args, Diagnostics *Error) {
   ArgT **InnerArgs = new ArgT *[Args.size()]();
 
@@ -318,7 +319,7 @@ variadicMatcherDescriptor(StringRef MatcherName, const SourceRange &NameRange,
 class VariadicFuncMatcherDescriptor : public MatcherDescriptor {
 public:
   typedef VariantMatcher (*RunFunc)(StringRef MatcherName,
-                                    const SourceRange &NameRange,
+                                    SourceRange NameRange,
                                     ArrayRef<ParserValue> Args,
                                     Diagnostics *Error);
 
@@ -332,19 +333,21 @@ public:
     BuildReturnTypeVector<ResultT>::build(RetKinds);
   }
 
-  VariantMatcher create(const SourceRange &NameRange,
-                        ArrayRef<ParserValue> Args, Diagnostics *Error) const {
+  VariantMatcher create(SourceRange NameRange,
+                        ArrayRef<ParserValue> Args,
+                        Diagnostics *Error) const override {
     return Func(MatcherName, NameRange, Args, Error);
   }
 
-  bool isVariadic() const { return true; }
-  unsigned getNumArgs() const { return 0; }
+  bool isVariadic() const override { return true; }
+  unsigned getNumArgs() const override { return 0; }
   void getArgKinds(ast_type_traits::ASTNodeKind ThisKind, unsigned ArgNo,
-                   std::vector<ArgKind> &Kinds) const {
+                   std::vector<ArgKind> &Kinds) const override {
     Kinds.push_back(ArgsKind);
   }
-  bool isConvertibleTo(ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
-                       ast_type_traits::ASTNodeKind *LeastDerivedKind) const {
+  bool isConvertibleTo(
+      ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
+      ast_type_traits::ASTNodeKind *LeastDerivedKind) const override {
     return isRetKindConvertibleTo(RetKinds, Kind, Specificity,
                                   LeastDerivedKind);
   }
@@ -406,11 +409,10 @@ private:
     return VariantMatcher();                                                   \
   }
 
-
 /// \brief 0-arg marshaller function.
 template <typename ReturnType>
 static VariantMatcher matcherMarshall0(void (*Func)(), StringRef MatcherName,
-                                       const SourceRange &NameRange,
+                                       SourceRange NameRange,
                                        ArrayRef<ParserValue> Args,
                                        Diagnostics *Error) {
   typedef ReturnType (*FuncType)();
@@ -421,7 +423,7 @@ static VariantMatcher matcherMarshall0(void (*Func)(), StringRef MatcherName,
 /// \brief 1-arg marshaller function.
 template <typename ReturnType, typename ArgType1>
 static VariantMatcher matcherMarshall1(void (*Func)(), StringRef MatcherName,
-                                       const SourceRange &NameRange,
+                                       SourceRange NameRange,
                                        ArrayRef<ParserValue> Args,
                                        Diagnostics *Error) {
   typedef ReturnType (*FuncType)(ArgType1);
@@ -434,7 +436,7 @@ static VariantMatcher matcherMarshall1(void (*Func)(), StringRef MatcherName,
 /// \brief 2-arg marshaller function.
 template <typename ReturnType, typename ArgType1, typename ArgType2>
 static VariantMatcher matcherMarshall2(void (*Func)(), StringRef MatcherName,
-                                       const SourceRange &NameRange,
+                                       SourceRange NameRange,
                                        ArrayRef<ParserValue> Args,
                                        Diagnostics *Error) {
   typedef ReturnType (*FuncType)(ArgType1, ArgType2);
@@ -487,11 +489,11 @@ public:
   OverloadedMatcherDescriptor(ArrayRef<MatcherDescriptor *> Callbacks)
       : Overloads(Callbacks.begin(), Callbacks.end()) {}
 
-  virtual ~OverloadedMatcherDescriptor() {}
+  ~OverloadedMatcherDescriptor() override {}
 
-  virtual VariantMatcher create(const SourceRange &NameRange,
-                                ArrayRef<ParserValue> Args,
-                                Diagnostics *Error) const {
+  VariantMatcher create(SourceRange NameRange,
+                        ArrayRef<ParserValue> Args,
+                        Diagnostics *Error) const override {
     std::vector<VariantMatcher> Constructed;
     Diagnostics::OverloadContext Ctx(Error);
     for (const auto &O : Overloads) {
@@ -512,7 +514,7 @@ public:
     return Constructed[0];
   }
 
-  bool isVariadic() const {
+  bool isVariadic() const override {
     bool Overload0Variadic = Overloads[0]->isVariadic();
 #ifndef NDEBUG
     for (const auto &O : Overloads) {
@@ -522,7 +524,7 @@ public:
     return Overload0Variadic;
   }
 
-  unsigned getNumArgs() const {
+  unsigned getNumArgs() const override {
     unsigned Overload0NumArgs = Overloads[0]->getNumArgs();
 #ifndef NDEBUG
     for (const auto &O : Overloads) {
@@ -533,15 +535,16 @@ public:
   }
 
   void getArgKinds(ast_type_traits::ASTNodeKind ThisKind, unsigned ArgNo,
-                   std::vector<ArgKind> &Kinds) const {
+                   std::vector<ArgKind> &Kinds) const override {
     for (const auto &O : Overloads) {
       if (O->isConvertibleTo(ThisKind))
         O->getArgKinds(ThisKind, ArgNo, Kinds);
     }
   }
 
-  bool isConvertibleTo(ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
-                       ast_type_traits::ASTNodeKind *LeastDerivedKind) const {
+  bool isConvertibleTo(
+      ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
+      ast_type_traits::ASTNodeKind *LeastDerivedKind) const override {
     for (const auto &O : Overloads) {
       if (O->isConvertibleTo(Kind, Specificity, LeastDerivedKind))
         return true;
@@ -562,9 +565,9 @@ public:
       : MinCount(MinCount), MaxCount(MaxCount), Op(Op),
         MatcherName(MatcherName) {}
 
-  virtual VariantMatcher create(const SourceRange &NameRange,
-                                ArrayRef<ParserValue> Args,
-                                Diagnostics *Error) const override {
+  VariantMatcher create(SourceRange NameRange,
+                        ArrayRef<ParserValue> Args,
+                        Diagnostics *Error) const override {
     if (Args.size() < MinCount || MaxCount < Args.size()) {
       const std::string MaxStr =
           (MaxCount == UINT_MAX ? "" : Twine(MaxCount)).str();
@@ -703,9 +706,9 @@ makeMatcherAutoMarshall(ast_matchers::internal::VariadicOperatorMatcherFunc<
                                                MatcherName);
 }
 
-}  // namespace internal
-}  // namespace dynamic
-}  // namespace ast_matchers
-}  // namespace clang
+} // namespace internal
+} // namespace dynamic
+} // namespace ast_matchers
+} // namespace clang
 
-#endif  // LLVM_CLANG_AST_MATCHERS_DYNAMIC_MARSHALLERS_H
+#endif // LLVM_CLANG_AST_MATCHERS_DYNAMIC_MARSHALLERS_H

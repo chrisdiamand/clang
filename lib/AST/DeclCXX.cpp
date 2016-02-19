@@ -46,34 +46,31 @@ void LazyASTUnresolvedSet::getFromExternalSource(ASTContext &C) const {
 }
 
 CXXRecordDecl::DefinitionData::DefinitionData(CXXRecordDecl *D)
-  : UserDeclaredConstructor(false), UserDeclaredSpecialMembers(0),
-    Aggregate(true), PlainOldData(true), Empty(true), Polymorphic(false),
-    Abstract(false), IsStandardLayout(true), HasNoNonEmptyBases(true),
-    HasPrivateFields(false), HasProtectedFields(false), HasPublicFields(false),
-    HasMutableFields(false), HasVariantMembers(false), HasOnlyCMembers(true),
-    HasInClassInitializer(false), HasUninitializedReferenceMember(false),
-    NeedOverloadResolutionForMoveConstructor(false),
-    NeedOverloadResolutionForMoveAssignment(false),
-    NeedOverloadResolutionForDestructor(false),
-    DefaultedMoveConstructorIsDeleted(false),
-    DefaultedMoveAssignmentIsDeleted(false),
-    DefaultedDestructorIsDeleted(false),
-    HasTrivialSpecialMembers(SMF_All),
-    DeclaredNonTrivialSpecialMembers(0),
-    HasIrrelevantDestructor(true),
-    HasConstexprNonCopyMoveConstructor(false),
-    DefaultedDefaultConstructorIsConstexpr(true),
-    HasConstexprDefaultConstructor(false),
-    HasNonLiteralTypeFieldsOrBases(false), ComputedVisibleConversions(false),
-    UserProvidedDefaultConstructor(false), DeclaredSpecialMembers(0),
-    ImplicitCopyConstructorHasConstParam(true),
-    ImplicitCopyAssignmentHasConstParam(true),
-    HasDeclaredCopyConstructorWithConstParam(false),
-    HasDeclaredCopyAssignmentWithConstParam(false),
-    IsLambda(false), IsParsingBaseSpecifiers(false), NumBases(0), NumVBases(0),
-    Bases(), VBases(),
-    Definition(D), FirstFriend() {
-}
+    : UserDeclaredConstructor(false), UserDeclaredSpecialMembers(0),
+      Aggregate(true), PlainOldData(true), Empty(true), Polymorphic(false),
+      Abstract(false), IsStandardLayout(true), HasNoNonEmptyBases(true),
+      HasPrivateFields(false), HasProtectedFields(false),
+      HasPublicFields(false), HasMutableFields(false), HasVariantMembers(false),
+      HasOnlyCMembers(true), HasInClassInitializer(false),
+      HasUninitializedReferenceMember(false), HasUninitializedFields(false),
+      NeedOverloadResolutionForMoveConstructor(false),
+      NeedOverloadResolutionForMoveAssignment(false),
+      NeedOverloadResolutionForDestructor(false),
+      DefaultedMoveConstructorIsDeleted(false),
+      DefaultedMoveAssignmentIsDeleted(false),
+      DefaultedDestructorIsDeleted(false), HasTrivialSpecialMembers(SMF_All),
+      DeclaredNonTrivialSpecialMembers(0), HasIrrelevantDestructor(true),
+      HasConstexprNonCopyMoveConstructor(false),
+      DefaultedDefaultConstructorIsConstexpr(true),
+      HasConstexprDefaultConstructor(false),
+      HasNonLiteralTypeFieldsOrBases(false), ComputedVisibleConversions(false),
+      UserProvidedDefaultConstructor(false), DeclaredSpecialMembers(0),
+      ImplicitCopyConstructorHasConstParam(true),
+      ImplicitCopyAssignmentHasConstParam(true),
+      HasDeclaredCopyConstructorWithConstParam(false),
+      HasDeclaredCopyAssignmentWithConstParam(false), IsLambda(false),
+      IsParsingBaseSpecifiers(false), NumBases(0), NumVBases(0), Bases(),
+      VBases(), Definition(D), FirstFriend() {}
 
 CXXBaseSpecifier *CXXRecordDecl::DefinitionData::getBasesSlowCase() const {
   return Bases.get(Definition->getASTContext().getExternalSource());
@@ -332,6 +329,9 @@ CXXRecordDecl::setBases(CXXBaseSpecifier const * const *Bases,
     if (BaseClassDecl->hasUninitializedReferenceMember())
       data().HasUninitializedReferenceMember = true;
 
+    if (!BaseClassDecl->allowConstDefaultInit())
+      data().HasUninitializedFields = true;
+
     addedClassSubobject(BaseClassDecl);
   }
   
@@ -385,17 +385,11 @@ void CXXRecordDecl::addedClassSubobject(CXXRecordDecl *Subobj) {
   }
 }
 
-/// Callback function for CXXRecordDecl::forallBases that acknowledges
-/// that it saw a base class.
-static bool SawBase(const CXXRecordDecl *, void *) {
-  return true;
-}
-
 bool CXXRecordDecl::hasAnyDependentBases() const {
   if (!isDependentContext())
     return false;
 
-  return !forallBases(SawBase, nullptr);
+  return !forallBases([](const CXXRecordDecl *) { return true; });
 }
 
 bool CXXRecordDecl::isTriviallyCopyable() const {
@@ -706,6 +700,15 @@ void CXXRecordDecl::addedMember(Decl *D) {
       //   A standard-layout class is a class that:
       //    -- has no non-static data members of type [...] reference,
       data().IsStandardLayout = false;
+    }
+
+    if (!Field->hasInClassInitializer() && !Field->isMutable()) {
+      if (CXXRecordDecl *FieldType = Field->getType()->getAsCXXRecordDecl()) {
+        if (FieldType->hasDefinition() && !FieldType->allowConstDefaultInit())
+          data().HasUninitializedFields = true;
+      } else {
+        data().HasUninitializedFields = true;
+      }
     }
 
     // Record if this field is the first non-literal or volatile field or base.
@@ -1224,6 +1227,10 @@ CXXRecordDecl *CXXRecordDecl::getInstantiatedFromMemberClass() const {
   return nullptr;
 }
 
+MemberSpecializationInfo *CXXRecordDecl::getMemberSpecializationInfo() const {
+  return TemplateOrInstantiation.dyn_cast<MemberSpecializationInfo *>();
+}
+
 void 
 CXXRecordDecl::setInstantiationOfMemberClass(CXXRecordDecl *RD,
                                              TemplateSpecializationKind TSK) {
@@ -1232,6 +1239,14 @@ CXXRecordDecl::setInstantiationOfMemberClass(CXXRecordDecl *RD,
   assert(!isa<ClassTemplatePartialSpecializationDecl>(this));
   TemplateOrInstantiation 
     = new (getASTContext()) MemberSpecializationInfo(RD, TSK);
+}
+
+ClassTemplateDecl *CXXRecordDecl::getDescribedClassTemplate() const {
+  return TemplateOrInstantiation.dyn_cast<ClassTemplateDecl *>();
+}
+
+void CXXRecordDecl::setDescribedClassTemplate(ClassTemplateDecl *Template) {
+  TemplateOrInstantiation = Template;
 }
 
 TemplateSpecializationKind CXXRecordDecl::getTemplateSpecializationKind() const{
@@ -1272,7 +1287,7 @@ const CXXRecordDecl *CXXRecordDecl::getTemplateInstantiationPattern() const {
           break;
         CTD = NewCTD;
       }
-      return CTD->getTemplatedDecl();
+      return CTD->getTemplatedDecl()->getDefinition();
     }
     if (auto *CTPSD =
             From.dyn_cast<ClassTemplatePartialSpecializationDecl *>()) {
@@ -1281,7 +1296,7 @@ const CXXRecordDecl *CXXRecordDecl::getTemplateInstantiationPattern() const {
           break;
         CTPSD = NewCTPSD;
       }
-      return CTPSD;
+      return CTPSD->getDefinition();
     }
   }
 
@@ -1290,7 +1305,7 @@ const CXXRecordDecl *CXXRecordDecl::getTemplateInstantiationPattern() const {
       const CXXRecordDecl *RD = this;
       while (auto *NewRD = RD->getInstantiatedFromMemberClass())
         RD = NewRD;
-      return RD;
+      return RD->getDefinition();
     }
   }
 
@@ -1313,6 +1328,28 @@ CXXDestructorDecl *CXXRecordDecl::getDestructor() const {
 
   CXXDestructorDecl *Dtor = cast<CXXDestructorDecl>(R.front());
   return Dtor;
+}
+
+bool CXXRecordDecl::isAnyDestructorNoReturn() const {
+  // Destructor is noreturn.
+  if (const CXXDestructorDecl *Destructor = getDestructor())
+    if (Destructor->isNoReturn())
+      return true;
+
+  // Check base classes destructor for noreturn.
+  for (const auto &Base : bases())
+    if (Base.getType()->getAsCXXRecordDecl()->isAnyDestructorNoReturn())
+      return true;
+
+  // Check fields for noreturn.
+  for (const auto *Field : fields())
+    if (const CXXRecordDecl *RD =
+            Field->getType()->getBaseElementTypeUnsafe()->getAsCXXRecordDecl())
+      if (RD->isAnyDestructorNoReturn())
+        return true;
+
+  // All destructors are not noreturn.
+  return false;
 }
 
 void CXXRecordDecl::completeDefinition() {
@@ -1659,8 +1696,8 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
     LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
     IsWritten(false), SourceOrderOrNumArrayIndices(NumIndices)
 {
-  VarDecl **MyIndices = reinterpret_cast<VarDecl **> (this + 1);
-  memcpy(MyIndices, Indices, NumIndices * sizeof(VarDecl *));
+  std::uninitialized_copy(Indices, Indices + NumIndices,
+                          getTrailingObjects<VarDecl *>());
 }
 
 CXXCtorInitializer *CXXCtorInitializer::Create(ASTContext &Context,
@@ -1670,8 +1707,7 @@ CXXCtorInitializer *CXXCtorInitializer::Create(ASTContext &Context,
                                                SourceLocation R,
                                                VarDecl **Indices,
                                                unsigned NumIndices) {
-  void *Mem = Context.Allocate(sizeof(CXXCtorInitializer) +
-                               sizeof(VarDecl *) * NumIndices,
+  void *Mem = Context.Allocate(totalSizeToAlloc<VarDecl *>(NumIndices),
                                llvm::alignOf<CXXCtorInitializer>());
   return new (Mem) CXXCtorInitializer(Context, Member, MemberLoc, L, Init, R,
                                       Indices, NumIndices);
@@ -2000,6 +2036,22 @@ NamespaceDecl *NamespaceDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
   return new (C, ID) NamespaceDecl(C, nullptr, false, SourceLocation(),
                                    SourceLocation(), nullptr, nullptr);
 }
+
+NamespaceDecl *NamespaceDecl::getOriginalNamespace() {
+  if (isFirstDecl())
+    return this;
+
+  return AnonOrFirstNamespaceAndInline.getPointer();
+}
+
+const NamespaceDecl *NamespaceDecl::getOriginalNamespace() const {
+  if (isFirstDecl())
+    return this;
+
+  return AnonOrFirstNamespaceAndInline.getPointer();
+}
+
+bool NamespaceDecl::isOriginalNamespace() const { return isFirstDecl(); }
 
 NamespaceDecl *NamespaceDecl::getNextRedeclarationImpl() {
   return getNextRedeclaration();

@@ -190,13 +190,21 @@ clang::analyze_format_string::ParseLengthModifier(FormatSpecifier &FS,
       return false;
     case 'h':
       ++I;
-      lmKind = (I != E && *I == 'h') ? (++I, LengthModifier::AsChar)
-                                     : LengthModifier::AsShort;
+      if (I != E && *I == 'h') {
+        ++I;
+        lmKind = LengthModifier::AsChar;
+      } else {
+        lmKind = LengthModifier::AsShort;
+      }
       break;
     case 'l':
       ++I;
-      lmKind = (I != E && *I == 'l') ? (++I, LengthModifier::AsLongLong)
-                                     : LengthModifier::AsLong;
+      if (I != E && *I == 'l') {
+        ++I;
+        lmKind = LengthModifier::AsLongLong;
+      } else {
+        lmKind = LengthModifier::AsLong;
+      }
       break;
     case 'j': lmKind = LengthModifier::AsIntMax;     ++I; break;
     case 'z': lmKind = LengthModifier::AsSizeT;      ++I; break;
@@ -799,7 +807,8 @@ bool FormatSpecifier::hasStandardLengthModifier() const {
   llvm_unreachable("Invalid LengthModifier Kind!");
 }
 
-bool FormatSpecifier::hasStandardConversionSpecifier(const LangOptions &LangOpt) const {
+bool FormatSpecifier::hasStandardConversionSpecifier(
+    const LangOptions &LangOpt) const {
   switch (CS.getKind()) {
     case ConversionSpecifier::cArg:
     case ConversionSpecifier::dArg:

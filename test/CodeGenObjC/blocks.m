@@ -84,7 +84,7 @@ void test2(Test2 *x) {
   // CHECK:      [[T0:%.*]] = bitcast [[WEAK_T]]* [[WEAKX]] to i8*
   // CHECK:      call void @_Block_object_dispose(i8* [[T0]], i32 8)
 
-  __weak __block Test2 *weakX = x;
+  __attribute__((objc_gc(weak))) __block Test2 *weakX = x;
   test2_helper(^{ [weakX destroy]; });
 }
 
@@ -116,7 +116,7 @@ void test3(void (^block)(int, ...)) {
 // CHECK-NEXT: [[T3:%.*]] = bitcast [[BLOCK_T]]* [[T1]] to i8*
 // CHECK-NEXT: [[T4:%.*]] = load i8*, i8** [[T2]]
 // CHECK-NEXT: [[T5:%.*]] = bitcast i8* [[T4]] to void (i8*, i32, ...)*
-// CHECK-NEXT: call void (i8*, i32, ...)* [[T5]](i8* [[T3]], i32 0, i32 1, i32 2, i32 3)
+// CHECK-NEXT: call void (i8*, i32, ...) [[T5]](i8* [[T3]], i32 0, i32 1, i32 2, i32 3)
 // CHECK-NEXT: ret void
 
 void test4(void (^block)()) {

@@ -16,11 +16,11 @@
 #define LLVM_CLANG_SEMA_ATTRIBUTELIST_H
 
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/VersionTuple.h"
 #include "clang/Sema/Ownership.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/Support/Allocator.h"
 #include <cassert>
 
@@ -81,6 +81,8 @@ public:
     AS_Declspec,
     /// __ptr16, alignas(...), etc.
     AS_Keyword,
+    /// Context-sensitive version of a keyword attribute.
+    AS_ContextSensitiveKeyword,
     /// #pragma ...
     AS_Pragma
   };
@@ -135,11 +137,9 @@ private:
   AttributeList *NextInPool;
 
   /// Arguments, if any, are stored immediately following the object.
-  ArgsUnion *getArgsBuffer() {
-    return reinterpret_cast<ArgsUnion*>(this+1);
-  }
+  ArgsUnion *getArgsBuffer() { return reinterpret_cast<ArgsUnion *>(this + 1); }
   ArgsUnion const *getArgsBuffer() const {
-    return reinterpret_cast<ArgsUnion const *>(this+1);
+    return reinterpret_cast<ArgsUnion const *>(this + 1);
   }
 
   enum AvailabilitySlot {
@@ -155,6 +155,17 @@ private:
   const AvailabilityChange &getAvailabilitySlot(AvailabilitySlot index) const {
     return reinterpret_cast<const AvailabilityChange*>(getArgsBuffer()
                                                        + NumArgs)[index];
+  }
+
+  /// The location of the 'nopartial' keyword in an availability attribute.
+  SourceLocation *getNopartialSlot() {
+    return reinterpret_cast<SourceLocation*>(
+               &getAvailabilitySlot(ObsoletedSlot) + 1);
+  }
+
+  SourceLocation const *getNopartialSlot() const {
+    return reinterpret_cast<SourceLocation const*>(
+               &getAvailabilitySlot(ObsoletedSlot) + 1);
   }
 
 public:
@@ -233,7 +244,7 @@ private:
                 const AvailabilityChange &obsoleted,
                 SourceLocation unavailable, 
                 const Expr *messageExpr,
-                Syntax syntaxUsed)
+                Syntax syntaxUsed, SourceLocation nopartial)
     : AttrName(attrName), ScopeName(scopeName), AttrRange(attrRange),
       ScopeLoc(scopeLoc), EllipsisLoc(), NumArgs(1), SyntaxUsed(syntaxUsed),
       Invalid(false), UsedAsTypeAttr(false), IsAvailability(true),
@@ -245,6 +256,7 @@ private:
     new (&getAvailabilitySlot(IntroducedSlot)) AvailabilityChange(introduced);
     new (&getAvailabilitySlot(DeprecatedSlot)) AvailabilityChange(deprecated);
     new (&getAvailabilitySlot(ObsoletedSlot)) AvailabilityChange(obsoleted);
+    memcpy(getNopartialSlot(), &nopartial, sizeof(SourceLocation));
     AttrKind = getKind(getName(), getScopeName(), syntaxUsed);
   }
 
@@ -343,14 +355,20 @@ public:
 
   bool isAlignasAttribute() const {
     // FIXME: Use a better mechanism to determine this.
-    return getKind() == AT_Aligned && SyntaxUsed == AS_Keyword;
+    return getKind() == AT_Aligned && isKeywordAttribute();
   }
 
   bool isDeclspecAttribute() const { return SyntaxUsed == AS_Declspec; }
   bool isCXX11Attribute() const {
     return SyntaxUsed == AS_CXX11 || isAlignasAttribute();
   }
-  bool isKeywordAttribute() const { return SyntaxUsed == AS_Keyword; }
+  bool isKeywordAttribute() const {
+    return SyntaxUsed == AS_Keyword || SyntaxUsed == AS_ContextSensitiveKeyword;
+  }
+
+  bool isContextSensitiveKeywordAttribute() const {
+    return SyntaxUsed == AS_ContextSensitiveKeyword;
+  }
 
   bool isInvalid() const { return Invalid; }
   void setInvalid(bool b = true) const { Invalid = b; }
@@ -406,6 +424,11 @@ public:
     return getAvailabilitySlot(ObsoletedSlot);
   }
 
+  SourceLocation getNopartialLoc() const {
+    assert(getKind() == AT_Availability && "Not an availability attribute");
+    return *getNopartialSlot();
+  }
+
   SourceLocation getUnavailableLoc() const {
     assert(getKind() == AT_Availability && "Not an availability attribute");
     return UnavailableLoc;
@@ -458,7 +481,7 @@ public:
   bool hasVariadicArg() const;
   bool diagnoseAppertainsTo(class Sema &S, const Decl *D) const;
   bool diagnoseLangOpts(class Sema &S) const;
-  bool existsInTarget(const llvm::Triple &T) const;
+  bool existsInTarget(const TargetInfo &Target) const;
   bool isKnownToGCC() const;
 
   /// \brief If the parsed attribute has a semantic equivalent, and it would
@@ -482,7 +505,7 @@ public:
     AvailabilityAllocSize =
       sizeof(AttributeList)
       + ((3 * sizeof(AvailabilityChange) + sizeof(void*) +
-         sizeof(ArgsUnion) - 1)
+         sizeof(ArgsUnion) + sizeof(SourceLocation) - 1)
          / sizeof(void*) * sizeof(void*)),
     TypeTagForDatatypeAllocSize =
       sizeof(AttributeList)
@@ -551,8 +574,10 @@ public:
   /// Create a new pool for a factory.
   AttributePool(AttributeFactory &factory) : Factory(factory), Head(nullptr) {}
 
+  AttributePool(const AttributePool &) = delete;
+
   /// Move the given pool's allocations to this pool.
-  AttributePool(AttributePool &pool) : Factory(pool.Factory), Head(pool.Head) {
+  AttributePool(AttributePool &&pool) : Factory(pool.Factory), Head(pool.Head) {
     pool.Head = nullptr;
   }
 
@@ -598,13 +623,14 @@ public:
                         const AvailabilityChange &obsoleted,
                         SourceLocation unavailable,
                         const Expr *MessageExpr,
-                        AttributeList::Syntax syntax) {
+                        AttributeList::Syntax syntax,
+                        SourceLocation nopartial) {
     void *memory = allocate(AttributeFactory::AvailabilityAllocSize);
     return add(new (memory) AttributeList(attrName, attrRange,
                                           scopeName, scopeLoc,
                                           Param, introduced, deprecated,
                                           obsoleted, unavailable, MessageExpr,
-                                          syntax));
+                                          syntax, nopartial));
   }
 
   AttributeList *create(IdentifierInfo *attrName, SourceRange attrRange,
@@ -733,10 +759,12 @@ public:
                         const AvailabilityChange &obsoleted,
                         SourceLocation unavailable,
                         const Expr *MessageExpr,
-                        AttributeList::Syntax syntax) {
+                        AttributeList::Syntax syntax,
+                        SourceLocation nopartial) {
     AttributeList *attr =
       pool.create(attrName, attrRange, scopeName, scopeLoc, Param, introduced,
-                  deprecated, obsoleted, unavailable, MessageExpr, syntax);
+                  deprecated, obsoleted, unavailable, MessageExpr, syntax,
+                  nopartial);
     add(attr);
     return attr;
   }
@@ -846,7 +874,9 @@ enum AttributeDeclKind {
   ExpectedStructOrUnionOrTypedef,
   ExpectedStructOrTypedef,
   ExpectedObjectiveCInterfaceOrProtocol,
-  ExpectedKernelFunction
+  ExpectedKernelFunction,
+  ExpectedFunctionWithProtoType,
+  ExpectedVariableEnumFieldOrTypedef
 };
 
 }  // end namespace clang

@@ -29,6 +29,7 @@ enum DeclUpdateKind {
   UPD_CXX_ADDED_FUNCTION_DEFINITION,
   UPD_CXX_INSTANTIATED_STATIC_DATA_MEMBER,
   UPD_CXX_INSTANTIATED_CLASS_DEFINITION,
+  UPD_CXX_INSTANTIATED_DEFAULT_ARGUMENT,
   UPD_CXX_RESOLVED_DTOR_DELETE,
   UPD_CXX_RESOLVED_EXCEPTION_SPEC,
   UPD_CXX_DEDUCED_RETURN_TYPE,
@@ -36,7 +37,8 @@ enum DeclUpdateKind {
   UPD_MANGLING_NUMBER,
   UPD_STATIC_LOCAL_NUMBER,
   UPD_DECL_MARKED_OPENMP_THREADPRIVATE,
-  UPD_DECL_EXPORTED
+  UPD_DECL_EXPORTED,
+  UPD_ADDED_ATTR_TO_RECORD
 };
 
 TypeIdx TypeIdxFromBuiltin(const BuiltinType *BT);
@@ -61,8 +63,6 @@ TypeID MakeTypeID(ASTContext &Context, QualType T, IdxForTypeTy IdxForType) {
     return TypeIdx(PREDEF_TYPE_AUTO_DEDUCT).asTypeID(FastQuals);
   if (T == Context.AutoRRefDeductTy)
     return TypeIdx(PREDEF_TYPE_AUTO_RREF_DEDUCT).asTypeID(FastQuals);
-  if (T == Context.VaListTagTy)
-    return TypeIdx(PREDEF_TYPE_VA_LIST_TAG).asTypeID(FastQuals);
 
   return IdxForType(T).asTypeID(FastQuals);
 }

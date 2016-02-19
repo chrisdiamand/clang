@@ -25,6 +25,7 @@
 #include "llvm/Bitcode/BitstreamReader.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
+
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
@@ -37,7 +38,7 @@ namespace {
 class CXLoadedDiagnosticSetImpl : public CXDiagnosticSetImpl {
 public:
   CXLoadedDiagnosticSetImpl() : CXDiagnosticSetImpl(true), FakeFiles(FO) {}
-  virtual ~CXLoadedDiagnosticSetImpl() {}  
+  ~CXLoadedDiagnosticSetImpl() override {}
 
   llvm::BumpPtrAllocator Alloc;
   Strings Categories;
@@ -56,7 +57,7 @@ public:
     return mem;
   }
 };
-}
+} // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
 // Cleanup.
@@ -246,7 +247,7 @@ public:
 
   CXDiagnosticSet load(const char *file);
 };
-}
+} // end anonymous namespace
 
 CXDiagnosticSet DiagLoader::load(const char *file) {
   TopDiags = llvm::make_unique<CXLoadedDiagnosticSetImpl>();
@@ -264,7 +265,7 @@ CXDiagnosticSet DiagLoader::load(const char *file) {
       reportInvalidFile(EC.message());
       break;
     }
-    return 0;
+    return nullptr;
   }
 
   return (CXDiagnosticSet)TopDiags.release();

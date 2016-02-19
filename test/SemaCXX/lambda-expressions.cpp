@@ -446,3 +446,44 @@ namespace PR21857 {
   template<typename Fn> fun<Fn> wrap(Fn fn);
   auto x = wrap([](){});
 }
+
+namespace PR13987 {
+class Enclosing {
+  void Method(char c = []()->char {
+    int d = []()->int {
+        struct LocalClass {
+          int Method() { return 0; }
+        };
+      return 0;
+    }();
+    return d; }()
+  );
+};
+}
+
+namespace PR23860 {
+template <class> struct A {
+  void f(int x = []() {
+    struct B {
+      void g() {}
+    };
+    return 0;
+  }());
+};
+
+int main() {
+}
+
+A<int> a;
+}
+
+// rdar://22032373
+namespace rdar22032373 {
+void foo() {
+  auto blk = [](bool b) {
+    if (b)
+      return undeclared_error; // expected-error {{use of undeclared identifier}}
+    return 0;
+  };
+}
+}

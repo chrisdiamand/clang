@@ -67,6 +67,13 @@ public:
 
   enum AddrSpaceMapMangling { ASMM_Target, ASMM_On, ASMM_Off };
 
+  enum MSVCMajorVersion {
+    MSVC2010 = 16,
+    MSVC2012 = 17,
+    MSVC2013 = 18,
+    MSVC2015 = 19
+  };
+
 public:
   /// \brief Set of enabled sanitizers.
   SanitizerSet Sanitize;
@@ -95,11 +102,24 @@ public:
 
   /// \brief The names of any features to enable in module 'requires' decls
   /// in addition to the hard-coded list in Module.cpp and the target features.
+  ///
+  /// This list is sorted.
   std::vector<std::string> ModuleFeatures;
 
   /// \brief Options for parsing comments.
   CommentOptions CommentOpts;
-  
+
+  /// \brief A list of all -fno-builtin-* function names (e.g., memset).
+  std::vector<std::string> NoBuiltinFuncs;
+
+  /// \brief Triples of the OpenMP targets that the host code codegen should
+  /// take into account in order to generate accurate offloading descriptors.
+  std::vector<llvm::Triple> OMPTargetTriples;
+
+  /// \brief Name of the IR file that contains the result of the OpenMP target
+  /// host code generation.
+  std::string OMPHostIRFile;
+
   LangOptions();
 
   // Define accessors/mutators for language options of enumeration type.
@@ -118,13 +138,17 @@ public:
            !ObjCSubscriptingLegacyRuntime;
   }
 
-  bool isCompatibleWithMSVC(unsigned MajorVersion) const {
+  bool isCompatibleWithMSVC(MSVCMajorVersion MajorVersion) const {
     return MSCompatibilityVersion >= MajorVersion * 10000000U;
   }
 
   /// \brief Reset all of the options that are not considered when building a
   /// module.
   void resetNonModularOptions();
+
+  /// \brief Is this a libc/libm function that is no longer recognized as a
+  /// builtin because a -fno-builtin-* option has been specified?
+  bool isNoBuiltinFunc(const char *Name) const;
 };
 
 /// \brief Floating point control options

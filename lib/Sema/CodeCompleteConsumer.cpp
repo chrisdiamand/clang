@@ -309,7 +309,7 @@ StringRef CodeCompletionTUInfo::getParentName(const DeclContext *DC) {
         if (!Interface) {
           // Assign an empty StringRef but with non-null data to distinguish
           // between empty because we didn't process the DeclContext yet.
-          CachedParentName = StringRef((const char *)~0U, 0);
+          CachedParentName = StringRef((const char *)(uintptr_t)~0U, 0);
           return StringRef();
         }
         
@@ -444,7 +444,8 @@ PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
       if (Results[I].Hidden)
         OS << " (Hidden)";
       if (CodeCompletionString *CCS 
-            = Results[I].CreateCodeCompletionString(SemaRef, getAllocator(),
+            = Results[I].CreateCodeCompletionString(SemaRef, Context,
+                                                    getAllocator(),
                                                     CCTUInfo,
                                                     includeBriefComments())) {
         OS << " : " << CCS->getAsString();
@@ -462,7 +463,8 @@ PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
     case CodeCompletionResult::RK_Macro: {
       OS << Results[I].Macro->getName();
       if (CodeCompletionString *CCS 
-            = Results[I].CreateCodeCompletionString(SemaRef, getAllocator(),
+            = Results[I].CreateCodeCompletionString(SemaRef, Context,
+                                                    getAllocator(),
                                                     CCTUInfo,
                                                     includeBriefComments())) {
         OS << " : " << CCS->getAsString();

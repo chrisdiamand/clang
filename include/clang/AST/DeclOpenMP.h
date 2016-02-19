@@ -17,6 +17,7 @@
 
 #include "clang/AST/DeclBase.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/TrailingObjects.h"
 
 namespace clang {
 class Expr;
@@ -33,8 +34,12 @@ class Expr;
 /// };
 /// \endcode
 ///
-class OMPThreadPrivateDecl : public Decl {
+class OMPThreadPrivateDecl final
+    : public Decl,
+      private llvm::TrailingObjects<OMPThreadPrivateDecl, Expr *> {
   friend class ASTDeclReader;
+  friend TrailingObjects;
+
   unsigned NumVars;
 
   virtual void anchor();
@@ -43,14 +48,11 @@ class OMPThreadPrivateDecl : public Decl {
     Decl(DK, DC, L), NumVars(0) { }
 
   ArrayRef<const Expr *> getVars() const {
-    return llvm::makeArrayRef(reinterpret_cast<const Expr * const *>(this + 1),
-                              NumVars);
+    return llvm::makeArrayRef(getTrailingObjects<Expr *>(), NumVars);
   }
 
   MutableArrayRef<Expr *> getVars() {
-    return MutableArrayRef<Expr *>(
-                           reinterpret_cast<Expr **>(this + 1),
-                           NumVars);
+    return MutableArrayRef<Expr *>(getTrailingObjects<Expr *>(), NumVars);
   }
 
   void setVars(ArrayRef<Expr *> VL);
@@ -85,6 +87,35 @@ public:
   static bool classofKind(Kind K) { return K == OMPThreadPrivate; }
 };
 
-}  // end namespace clang
+/// Pseudo declaration for capturing expressions. Also is used for capturing of
+/// non-static data members in non-static member functions.
+///
+/// Clang supports capturing of variables only, but OpenMP 4.5 allows to
+/// privatize non-static members of current class in non-static member
+/// functions. This pseudo-declaration allows properly handle this kind of
+/// capture by wrapping captured expression into a variable-like declaration.
+class OMPCapturedExprDecl final : public VarDecl {
+  friend class ASTDeclReader;
+  void anchor() override;
+
+  OMPCapturedExprDecl(ASTContext &C, DeclContext *DC, IdentifierInfo *Id,
+                      QualType Type)
+      : VarDecl(OMPCapturedExpr, C, DC, SourceLocation(), SourceLocation(), Id,
+                Type, nullptr, SC_None) {
+    setImplicit();
+  }
+
+public:
+  static OMPCapturedExprDecl *Create(ASTContext &C, DeclContext *DC,
+                                     IdentifierInfo *Id, QualType T);
+
+  static OMPCapturedExprDecl *CreateDeserialized(ASTContext &C, unsigned ID);
+
+  // Implement isa/cast/dyncast/etc.
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == OMPCapturedExpr; }
+};
+
+} // end namespace clang
 
 #endif

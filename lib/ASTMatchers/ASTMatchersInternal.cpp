@@ -20,21 +20,21 @@ namespace clang {
 namespace ast_matchers {
 namespace internal {
 
-bool NotUnaryOperator(const ast_type_traits::DynTypedNode DynNode,
+bool NotUnaryOperator(const ast_type_traits::DynTypedNode &DynNode,
                       ASTMatchFinder *Finder, BoundNodesTreeBuilder *Builder,
                       ArrayRef<DynTypedMatcher> InnerMatchers);
 
-bool AllOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
+bool AllOfVariadicOperator(const ast_type_traits::DynTypedNode &DynNode,
                            ASTMatchFinder *Finder,
                            BoundNodesTreeBuilder *Builder,
                            ArrayRef<DynTypedMatcher> InnerMatchers);
 
-bool EachOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
+bool EachOfVariadicOperator(const ast_type_traits::DynTypedNode &DynNode,
                             ASTMatchFinder *Finder,
                             BoundNodesTreeBuilder *Builder,
                             ArrayRef<DynTypedMatcher> InnerMatchers);
 
-bool AnyOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
+bool AnyOfVariadicOperator(const ast_type_traits::DynTypedNode &DynNode,
                            ASTMatchFinder *Finder,
                            BoundNodesTreeBuilder *Builder,
                            ArrayRef<DynTypedMatcher> InnerMatchers);
@@ -51,7 +51,7 @@ void BoundNodesTreeBuilder::visitMatches(Visitor *ResultVisitor) {
 namespace {
 
 typedef bool (*VariadicOperatorFunction)(
-    const ast_type_traits::DynTypedNode DynNode, ASTMatchFinder *Finder,
+    const ast_type_traits::DynTypedNode &DynNode, ASTMatchFinder *Finder,
     BoundNodesTreeBuilder *Builder, ArrayRef<DynTypedMatcher> InnerMatchers);
 
 template <VariadicOperatorFunction Func>
@@ -110,15 +110,15 @@ static llvm::ManagedStatic<TrueMatcherImpl> TrueMatcherInstance;
 
 DynTypedMatcher DynTypedMatcher::constructVariadic(
     DynTypedMatcher::VariadicOperator Op,
+    ast_type_traits::ASTNodeKind SupportedKind,
     std::vector<DynTypedMatcher> InnerMatchers) {
   assert(InnerMatchers.size() > 0 && "Array must not be empty.");
   assert(std::all_of(InnerMatchers.begin(), InnerMatchers.end(),
-                     [&InnerMatchers](const DynTypedMatcher &M) {
-           return InnerMatchers[0].SupportedKind.isSame(M.SupportedKind);
-         }) &&
-         "SupportedKind must match!");
+                     [SupportedKind](const DynTypedMatcher &M) {
+                       return M.canConvertTo(SupportedKind);
+                     }) &&
+         "InnerMatchers must be convertible to SupportedKind!");
 
-  auto SupportedKind = InnerMatchers[0].SupportedKind;
   // We must relax the restrict kind here.
   // The different operators might deal differently with a mismatch.
   // Make it the same as SupportedKind, since that is the broadest type we are
@@ -228,7 +228,7 @@ void BoundNodesTreeBuilder::addMatch(const BoundNodesTreeBuilder &Other) {
   Bindings.append(Other.Bindings.begin(), Other.Bindings.end());
 }
 
-bool NotUnaryOperator(const ast_type_traits::DynTypedNode DynNode,
+bool NotUnaryOperator(const ast_type_traits::DynTypedNode &DynNode,
                       ASTMatchFinder *Finder, BoundNodesTreeBuilder *Builder,
                       ArrayRef<DynTypedMatcher> InnerMatchers) {
   if (InnerMatchers.size() != 1)
@@ -248,7 +248,7 @@ bool NotUnaryOperator(const ast_type_traits::DynTypedNode DynNode,
   return !InnerMatchers[0].matches(DynNode, Finder, &Discard);
 }
 
-bool AllOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
+bool AllOfVariadicOperator(const ast_type_traits::DynTypedNode &DynNode,
                            ASTMatchFinder *Finder,
                            BoundNodesTreeBuilder *Builder,
                            ArrayRef<DynTypedMatcher> InnerMatchers) {
@@ -262,7 +262,7 @@ bool AllOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
   return true;
 }
 
-bool EachOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
+bool EachOfVariadicOperator(const ast_type_traits::DynTypedNode &DynNode,
                             ASTMatchFinder *Finder,
                             BoundNodesTreeBuilder *Builder,
                             ArrayRef<DynTypedMatcher> InnerMatchers) {
@@ -279,7 +279,7 @@ bool EachOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
   return Matched;
 }
 
-bool AnyOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
+bool AnyOfVariadicOperator(const ast_type_traits::DynTypedNode &DynNode,
                            ASTMatchFinder *Finder,
                            BoundNodesTreeBuilder *Builder,
                            ArrayRef<DynTypedMatcher> InnerMatchers) {
@@ -293,50 +293,155 @@ bool AnyOfVariadicOperator(const ast_type_traits::DynTypedNode DynNode,
   return false;
 }
 
-HasNameMatcher::HasNameMatcher(StringRef NameRef)
-    : UseUnqualifiedMatch(NameRef.find("::") == NameRef.npos), Name(NameRef) {
+HasNameMatcher::HasNameMatcher(std::string NameRef)
+    : UseUnqualifiedMatch(NameRef.find("::") == NameRef.npos),
+      Name(std::move(NameRef)) {
   assert(!Name.empty());
 }
 
-bool HasNameMatcher::matchesNodeUnqualified(const NamedDecl &Node) const {
-  assert(UseUnqualifiedMatch);
-  if (Node.getIdentifier()) {
-    // Simple name.
-    return Name == Node.getName();
+namespace {
+
+bool ConsumeNameSuffix(StringRef &FullName, StringRef Suffix) {
+  StringRef Name = FullName;
+  if (!Name.endswith(Suffix))
+    return false;
+  Name = Name.drop_back(Suffix.size());
+  if (!Name.empty()) {
+    if (!Name.endswith("::"))
+      return false;
+    Name = Name.drop_back(2);
   }
+  FullName = Name;
+  return true;
+}
+
+bool ConsumeNodeName(StringRef &Name, const NamedDecl &Node) {
+  // Simple name.
+  if (Node.getIdentifier())
+    return ConsumeNameSuffix(Name, Node.getName());
+
   if (Node.getDeclName()) {
     // Name needs to be constructed.
     llvm::SmallString<128> NodeName;
     llvm::raw_svector_ostream OS(NodeName);
     Node.printName(OS);
-    return Name == OS.str();
+    return ConsumeNameSuffix(Name, OS.str());
   }
+
+  return ConsumeNameSuffix(Name, "(anonymous)");
+}
+
+}  // namespace
+
+bool HasNameMatcher::matchesNodeUnqualified(const NamedDecl &Node) const {
+  assert(UseUnqualifiedMatch);
+  StringRef NodeName = Name;
+  return ConsumeNodeName(NodeName, Node) && NodeName.empty();
+}
+
+bool HasNameMatcher::matchesNodeFullFast(const NamedDecl &Node) const {
+  // This function is copied and adapted from NamedDecl::printQualifiedName()
+  // By matching each part individually we optimize in a couple of ways:
+  //  - We can exit early on the first failure.
+  //  - We can skip inline/anonymous namespaces without another pass.
+  //  - We print one name at a time, reducing the chance of overflowing the
+  //    inlined space of the SmallString.
+  StringRef Pattern = Name;
+  const bool IsFullyQualified = Pattern.startswith("::");
+
+  // First, match the name.
+  if (!ConsumeNodeName(Pattern, Node))
+    return false;
+
+  // Try to match each declaration context.
+  // We are allowed to skip anonymous and inline namespaces if they don't match.
+  const DeclContext *Ctx = Node.getDeclContext();
+
+  if (Ctx->isFunctionOrMethod())
+    return Pattern.empty() && !IsFullyQualified;
+
+  for (; !Pattern.empty() && Ctx && isa<NamedDecl>(Ctx);
+       Ctx = Ctx->getParent()) {
+    if (const auto *ND = dyn_cast<NamespaceDecl>(Ctx)) {
+      StringRef NSName =
+          ND->isAnonymousNamespace() ? "(anonymous namespace)" : ND->getName();
+
+      // If it matches, continue.
+      if (ConsumeNameSuffix(Pattern, NSName))
+        continue;
+      // If it didn't match but we can skip it, continue.
+      if (ND->isAnonymousNamespace() || ND->isInline())
+        continue;
+
+      return false;
+    }
+    if (const auto *RD = dyn_cast<RecordDecl>(Ctx)) {
+      if (!isa<ClassTemplateSpecializationDecl>(Ctx)) {
+        if (RD->getIdentifier()) {
+          if (ConsumeNameSuffix(Pattern, RD->getName()))
+            continue;
+        } else {
+          llvm::SmallString<128> NodeName;
+          NodeName += StringRef("(anonymous ");
+          NodeName += RD->getKindName();
+          NodeName += ')';
+          if (ConsumeNameSuffix(Pattern, NodeName))
+            continue;
+        }
+
+        return false;
+      }
+    }
+
+    // We don't know how to deal with this DeclContext.
+    // Fallback to the slow version of the code.
+    return matchesNodeFullSlow(Node);
+  }
+
+  // If we are fully qualified, we must not have any leftover context.
+  if (IsFullyQualified && Ctx && isa<NamedDecl>(Ctx))
+    return false;
+
+  return Pattern.empty();
+}
+
+bool HasNameMatcher::matchesNodeFullSlow(const NamedDecl &Node) const {
+  const StringRef Pattern = Name;
+
+  const bool SkipUnwrittenCases[] = {false, true};
+  for (bool SkipUnwritten : SkipUnwrittenCases) {
+    llvm::SmallString<128> NodeName = StringRef("::");
+    llvm::raw_svector_ostream OS(NodeName);
+
+    if (SkipUnwritten) {
+      PrintingPolicy Policy = Node.getASTContext().getPrintingPolicy();
+      Policy.SuppressUnwrittenScope = true;
+      Node.printQualifiedName(OS, Policy);
+    } else {
+      Node.printQualifiedName(OS);
+    }
+
+    const StringRef FullName = OS.str();
+
+    if (Pattern.startswith("::")) {
+      if (FullName == Pattern)
+        return true;
+    } else if (FullName.endswith(Pattern) &&
+               FullName.drop_back(Pattern.size()).endswith("::")) {
+      return true;
+    }
+  }
+
   return false;
 }
 
-bool HasNameMatcher::matchesNodeFull(const NamedDecl &Node) const {
-  llvm::SmallString<128> NodeName = StringRef("::");
-  llvm::raw_svector_ostream OS(NodeName);
-  Node.printQualifiedName(OS);
-  const StringRef FullName = OS.str();
-  const StringRef Pattern = Name;
-
-  if (Pattern.startswith("::"))
-    return FullName == Pattern;
-
-  return FullName.endswith(Pattern) &&
-         FullName.drop_back(Pattern.size()).endswith("::");
-}
-
 bool HasNameMatcher::matchesNode(const NamedDecl &Node) const {
-  // FIXME: There is still room for improvement, but it would require copying a
-  // lot of the logic from NamedDecl::printQualifiedName(). The benchmarks do
-  // not show like that extra complexity is needed right now.
+  assert(matchesNodeFullFast(Node) == matchesNodeFullSlow(Node));
   if (UseUnqualifiedMatch) {
-    assert(matchesNodeUnqualified(Node) == matchesNodeFull(Node));
+    assert(matchesNodeUnqualified(Node) == matchesNodeFullFast(Node));
     return matchesNodeUnqualified(Node);
   }
-  return matchesNodeFull(Node);
+  return matchesNodeFullFast(Node);
 }
 
 } // end namespace internal

@@ -201,6 +201,10 @@ public:
     }
     return static_cast<T*>(data);
   }
+
+  /// Returns true if the root namespace of the given declaration is the 'std'
+  /// C++ namespace.
+  static bool isInStdNamespace(const Decl *D);
 private:
   ManagedAnalysis *&getAnalysisImpl(const void* tag);
 
@@ -289,7 +293,7 @@ class StackFrameContext : public LocationContext {
       Block(blk), Index(idx) {}
 
 public:
-  ~StackFrameContext() {}
+  ~StackFrameContext() override {}
 
   const Stmt *getCallSite() const { return CallSite; }
 
@@ -324,7 +328,7 @@ class ScopeContext : public LocationContext {
     : LocationContext(Scope, ctx, parent), Enter(s) {}
 
 public:
-  ~ScopeContext() {}
+  ~ScopeContext() override {}
 
   void Profile(llvm::FoldingSetNodeID &ID) override;
 
@@ -352,7 +356,7 @@ class BlockInvocationContext : public LocationContext {
     : LocationContext(Block, ctx, parent), BD(bd), ContextData(contextData) {}
 
 public:
-  ~BlockInvocationContext() {}
+  ~BlockInvocationContext() override {}
 
   const BlockDecl *getBlockDecl() const { return BD; }
   
