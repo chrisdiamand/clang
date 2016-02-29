@@ -1918,7 +1918,7 @@ AvailabilityAttr *Sema::mergeAvailabilityAttr(NamedDecl *D, SourceRange Range,
                                               VersionTuple Obsoleted,
                                               bool IsUnavailable,
                                               StringRef Message,
-                                              bool IsNopartial,
+                                              bool IsStrict,
                                               AvailabilityMergeKind AMK,
                                               unsigned AttrSpellingListIndex) {
   VersionTuple MergedIntroduced = Introduced;
@@ -2065,7 +2065,7 @@ AvailabilityAttr *Sema::mergeAvailabilityAttr(NamedDecl *D, SourceRange Range,
     return ::new (Context) AvailabilityAttr(Range, Context, Platform,
                                             Introduced, Deprecated,
                                             Obsoleted, IsUnavailable, Message,
-                                            IsNopartial, AttrSpellingListIndex);
+                                            IsStrict, AttrSpellingListIndex);
   }
   return nullptr;
 }
@@ -2092,7 +2092,7 @@ static void handleAvailabilityAttr(Sema &S, Decl *D,
   AvailabilityChange Deprecated = Attr.getAvailabilityDeprecated();
   AvailabilityChange Obsoleted = Attr.getAvailabilityObsoleted();
   bool IsUnavailable = Attr.getUnavailableLoc().isValid();
-  bool IsNopartial = Attr.getNopartialLoc().isValid();
+  bool IsStrict = Attr.getStrictLoc().isValid();
   StringRef Str;
   if (const StringLiteral *SE =
           dyn_cast_or_null<StringLiteral>(Attr.getMessageExpr()))
@@ -2103,7 +2103,7 @@ static void handleAvailabilityAttr(Sema &S, Decl *D,
                                                       Deprecated.Version,
                                                       Obsoleted.Version,
                                                       IsUnavailable, Str,
-                                                      IsNopartial,
+                                                      IsStrict,
                                                       Sema::AMK_None,
                                                       Index);
   if (NewAttr)
@@ -2148,7 +2148,7 @@ static void handleAvailabilityAttr(Sema &S, Decl *D,
                                                             NewDeprecated,
                                                             NewObsoleted,
                                                             IsUnavailable, Str,
-                                                            IsNopartial,
+                                                            IsStrict,
                                                             Sema::AMK_None,
                                                             Index);
         if (NewAttr)
@@ -2171,7 +2171,7 @@ static void handleAvailabilityAttr(Sema &S, Decl *D,
                                                             Deprecated.Version,
                                                             Obsoleted.Version,
                                                             IsUnavailable, Str,
-                                                            IsNopartial,
+                                                            IsStrict,
                                                             Sema::AMK_None,
                                                             Index);
         if (NewAttr)
@@ -5043,6 +5043,40 @@ static bool handleCommonAttributeFeatures(Sema &S, Scope *scope, Decl *D,
   return false;
 }
 
+static void handleOpenCLAccessAttr(Sema &S, Decl *D,
+                                   const AttributeList &Attr) {
+  if (D->isInvalidDecl())
+    return;
+
+  // Check if there is only one access qualifier.
+  if (D->hasAttr<OpenCLAccessAttr>()) {
+    S.Diag(Attr.getLoc(), diag::err_opencl_multiple_access_qualifiers)
+        << D->getSourceRange();
+    D->setInvalidDecl(true);
+    return;
+  }
+
+  // OpenCL v2.0 s6.6 - read_write can be used for image types to specify that an
+  // image object can be read and written.
+  // OpenCL v2.0 s6.13.6 - A kernel cannot read from and write to the same pipe
+  // object. Using the read_write (or __read_write) qualifier with the pipe
+  // qualifier is a compilation error.
+  if (const ParmVarDecl *PDecl = dyn_cast<ParmVarDecl>(D)) {
+    const Type *DeclTy = PDecl->getType().getCanonicalType().getTypePtr();
+    if (Attr.getName()->getName().find("read_write") != StringRef::npos) {
+      if (S.getLangOpts().OpenCLVersion < 200 || DeclTy->isPipeType()) {
+        S.Diag(Attr.getLoc(), diag::err_opencl_invalid_read_write)
+            << Attr.getName() << PDecl->getType() << DeclTy->isImageType();
+        D->setInvalidDecl(true);
+        return;
+      }
+    }
+  }
+
+  D->addAttr(::new (S.Context) OpenCLAccessAttr(
+      Attr.getRange(), S.Context, Attr.getAttributeSpellingListIndex()));
+}
+
 //===----------------------------------------------------------------------===//
 // Top Level Sema Entry Points
 //===----------------------------------------------------------------------===//
@@ -5440,8 +5474,8 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case AttributeList::AT_OpenCLKernel:
     handleSimpleAttribute<OpenCLKernelAttr>(S, D, Attr);
     break;
-  case AttributeList::AT_OpenCLImageAccess:
-    handleSimpleAttribute<OpenCLImageAccessAttr>(S, D, Attr);
+  case AttributeList::AT_OpenCLAccess:
+    handleOpenCLAccessAttr(S, D, Attr);
     break;
   case AttributeList::AT_InternalLinkage:
     handleInternalLinkageAttr(S, D, Attr);
@@ -5964,14 +5998,6 @@ static void DoEmitAvailabilityWarning(Sema &S, Sema::AvailabilityDiagnostic K,
     property_note_select = /* partial */ 2;
     available_here_select_kind = /* partial */ 3;
     break;
-
-  case Sema::AD_NotYetIntroduced:
-    diag = diag::err_notyetintroduced;
-    diag_message = diag::err_notyetintroduced_message;
-    diag_fwdclass_message = diag::warn_notyetintroduced_fwdclass_message;
-    property_note_select = /* deprecated */ 3;
-    available_here_select_kind = /* notyetintroduced */ 4;
-    break;
   }
 
   if (!Message.empty()) {
@@ -5998,22 +6024,10 @@ static void DoEmitAvailabilityWarning(Sema &S, Sema::AvailabilityDiagnostic K,
 static void handleDelayedAvailabilityCheck(Sema &S, DelayedDiagnostic &DD,
                                            Decl *Ctx) {
   assert(DD.Kind == DelayedDiagnostic::Deprecation ||
-         DD.Kind == DelayedDiagnostic::Unavailable ||
-         DD.Kind == DelayedDiagnostic::NotYetIntroduced);
-  Sema::AvailabilityDiagnostic AD;
-  switch (DD.Kind) {
-  case DelayedDiagnostic::Deprecation:
-    AD = Sema::AD_Deprecation;
-    break;
-  case DelayedDiagnostic::Unavailable:
-    AD = Sema::AD_Unavailable;
-    break;
-  case DelayedDiagnostic::NotYetIntroduced:
-    AD = Sema::AD_NotYetIntroduced;
-    break;
-  default:
-    llvm_unreachable("Expecting: deprecated, unavailable, not-yet-introduced");
-  }
+         DD.Kind == DelayedDiagnostic::Unavailable);
+  Sema::AvailabilityDiagnostic AD = DD.Kind == DelayedDiagnostic::Deprecation
+                                        ? Sema::AD_Deprecation
+                                        : Sema::AD_Unavailable;
   DD.Triggered = true;
   DoEmitAvailabilityWarning(
       S, AD, Ctx, DD.getDeprecationDecl(), DD.getDeprecationMessage(), DD.Loc,
