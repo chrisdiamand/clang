@@ -4185,6 +4185,10 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   if (IsX86 || IsX86_64) {
     Res |= SanitizerKind::Function;
   }
+  if (IsX86_64) {
+    Res |= SanitizerKind::Crunch;
+    Res |= SanitizerKind::Allocs;
+  }
   return Res;
 }
 
