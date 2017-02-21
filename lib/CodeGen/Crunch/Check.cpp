@@ -2,6 +2,7 @@
 
 #include "CodeGenFunction.h"
 #include "CodeGenModule.h"
+#include "clang/Lex/Lexer.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -71,10 +72,10 @@ bool sloppyFunctionPointers() {
 static std::string getCheckFunctionName(CheckFunctionKind Kind) {
   switch (Kind) {
     case CT_NoCheck:            return "__no_check";
-    case CT_IsA:                return "__is_aU_not_inlined";
-    case CT_Named:              return "__named_a_internal";
-    case CT_PointerOfDegree:    return "__is_a_pointer_of_degree_internal";
-    case CT_FunctionRefining:   return "__is_a_function_refining_internal";
+    case CT_IsA:                return "__is_aU";
+    case CT_Named:              return "__named_aU";
+    case CT_PointerOfDegree:    return "__is_a_pointer_of_degree";
+    case CT_FunctionRefining:   return "__is_a_function_refiningU";
   }
   assert(false && "Invalid CheckFunctionKind");
   return "ERROR";
@@ -107,6 +108,29 @@ void Check::emit() {
    * instead of the function pointer cast. */
   if (sloppyFunctionPointers() && CheckFunKind == CT_FunctionRefining)
     return;
+
+  /* Don't put checks in our own inlines' code. Without this, aside from
+   * infinite regress at run time, we can't inline our own check functions
+   * at compile time (because they're recursive, if they use casts). */
+  SourceLocation b(CGF.CurFuncDecl->getLocStart()), _e(CGF.CurFuncDecl->getLocEnd());
+  SourceManager &sm = CGF.getContext().getSourceManager();
+  clang::SourceLocation e(clang::Lexer::getLocForEndOfToken(_e, 0,
+    sm, CGF.getContext().getLangOpts()));
+  /* If we wanted to get the actual source text, this is what we'd do:
+     std::string sourceFile(sm.getCharacterData(b), sm.getCharacterData(e) - sm.getCharacterData(b));
+   */
+  std::string sourceFile = sm.getPresumedLoc(e, true).getFilename();
+  /* Pretty HACKy test for our own headers. Will avoid this when we do the instrumentation
+   * in the IR (sigh). */
+  const char *ourInlinesFileSuffixes[] = { "/libcrunch_cil_inlines.h", "/liballocs_cil_inlines.h", NULL };
+  for (const char **p_suffix = &ourInlinesFileSuffixes[0]; *p_suffix; ++p_suffix) {
+    std::string suffix = *p_suffix;
+    if (sourceFile.length() > suffix.length() &&
+        0 == sourceFile.compare(sourceFile.length() - suffix.length(),
+          suffix.length(), suffix)) {
+      return;
+    }
+  }
 
   /* The IsA check calls a function which already increments the counter for
    * us. The other calls just skip straight to calling %_internal. */
