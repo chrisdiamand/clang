@@ -2913,7 +2913,7 @@ static bool addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
     CmdArgs.push_back("-export-dynamic");
 
   if (TC.getSanitizerArgs().needsCrunchRt())
-    CmdArgs.push_back("-lcrunch_preload");
+    CmdArgs.push_back("-lcrunch_stubs");
 
   return !StaticRuntimes.empty();
 }
